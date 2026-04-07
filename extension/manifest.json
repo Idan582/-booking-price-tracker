@@ -1,15 +1,23 @@
 {
   "manifest_version": 3,
   "name": "Booking.com Price Tracker",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Track hotel prices on Booking.com and get alerted when they drop below your target.",
   "permissions": [
     "activeTab",
-    "scripting"
+    "scripting",
+    "tabs"
   ],
   "host_permissions": [
-    "https://www.booking.com/*",
+    "*://*.booking.com/*",
     "http://localhost/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*.booking.com/hotel/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
   ],
   "action": {
     "default_popup": "popup.html",

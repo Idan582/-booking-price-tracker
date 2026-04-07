@@ -1,106 +1,130 @@
-const express = require("express");
-const cors = require("cors");
-const fs = require("fs");
-const path = require("path");
+'use strict';
 
-const app = express();
-const PORT = 3001;
-const DATA_FILE = path.join(__dirname, "tracked_hotels.json");
+require('dotenv').config(); // load .env before anything else
 
-// --- Middleware ---
-app.use(cors({ origin: "*" })); // Allow requests from the Chrome extension
+const express          = require('express');
+const cors             = require('cors');
+const fs               = require('fs');
+const path             = require('path');
+const cron             = require('node-cron');
+const { runScrapeJob } = require('./scraper');
+
+const app      = express();
+const PORT     = 3001;
+const DATA_FILE = path.join(__dirname, 'tracked_hotels.json');
+
+// ── CORS ─────────────────────────────────────────────────────────────────────
+// Allow requests from:
+//   • Booking.com pages (content script fetch origin)
+//   • Chrome extension background / popup
+//   • localhost (dev / testing)
+
+const ALLOWED_ORIGIN = /^(https:\/\/([a-z0-9-]+\.)*booking\.com|chrome-extension:\/\/[a-z0-9]+|https?:\/\/localhost(:\d+)?)$/;
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // No origin header = curl / Postman / same-origin — allow
+    if (!origin) return callback(null, true);
+    if (ALLOWED_ORIGIN.test(origin)) return callback(null, true);
+    callback(new Error(`CORS: origin not allowed — ${origin}`));
+  },
+  methods:        ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type'],
+}));
+
 app.use(express.json());
 
-// --- Helpers ---
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function loadTrackedHotels() {
-  if (!fs.existsSync(DATA_FILE)) {
-    return [];
-  }
+  if (!fs.existsSync(DATA_FILE)) return [];
   try {
-    const raw = fs.readFileSync(DATA_FILE, "utf-8");
-    return JSON.parse(raw);
+    return JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
   } catch {
     return [];
   }
 }
 
 function saveTrackedHotels(hotels) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(hotels, null, 2), "utf-8");
+  fs.writeFileSync(DATA_FILE, JSON.stringify(hotels, null, 2), 'utf-8');
 }
 
 function isValidBookingUrl(url) {
   try {
     const parsed = new URL(url);
-    return parsed.hostname === "www.booking.com" && parsed.pathname.includes("/hotel/");
+    return parsed.hostname === 'www.booking.com' && parsed.pathname.includes('/hotel/');
   } catch {
     return false;
   }
 }
 
-// --- Routes ---
+// ── Routes ────────────────────────────────────────────────────────────────────
 
-// POST /api/track — Add a new hotel to track
-app.post("/api/track", (req, res) => {
-  const { url, targetPrice } = req.body;
+// POST /api/track — add or update a tracked package
+app.post('/api/track', (req, res) => {
+  const { url, roomPackage, targetPrice, email, telegram, telegramChatId } = req.body;
 
-  // Validate presence
-  if (!url || targetPrice === undefined || targetPrice === null) {
-    return res.status(400).json({ error: "Both 'url' and 'targetPrice' are required." });
+  if (!url || !roomPackage || targetPrice === undefined || targetPrice === null) {
+    return res.status(400).json({ error: "'url', 'roomPackage', and 'targetPrice' are all required." });
   }
-
-  // Validate URL
   if (!isValidBookingUrl(url)) {
-    return res.status(400).json({ error: "URL must be a valid Booking.com hotel page." });
+    return res.status(400).json({ error: 'URL must be a valid Booking.com hotel page.' });
+  }
+  if (typeof roomPackage !== 'string' || roomPackage.trim() === '') {
+    return res.status(400).json({ error: "'roomPackage' must be a non-empty string." });
   }
 
-  // Validate price
   const price = parseFloat(targetPrice);
   if (isNaN(price) || price <= 0) {
     return res.status(400).json({ error: "'targetPrice' must be a positive number." });
   }
 
-  const hotels = loadTrackedHotels();
+  const hotels       = loadTrackedHotels();
+  const existingIndex = hotels.findIndex(
+    (h) => h.url === url && h.roomPackage === roomPackage.trim()
+  );
 
-  // Check for duplicates (same URL already being tracked)
-  const existingIndex = hotels.findIndex((h) => h.url === url);
-
+  const prev  = existingIndex >= 0 ? hotels[existingIndex] : {};
   const entry = {
-    id: existingIndex >= 0 ? hotels[existingIndex].id : Date.now().toString(),
+    id:          existingIndex >= 0 ? prev.id : Date.now().toString(),
     url,
+    roomPackage: roomPackage.trim(),
     targetPrice: price,
-    addedAt: existingIndex >= 0 ? hotels[existingIndex].addedAt : new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    email:          email          || prev.email          || null,
+    telegram:       telegram === true || prev.telegram === true,
+    telegramChatId: telegramChatId || prev.telegramChatId || null,
+    addedAt:     existingIndex >= 0 ? prev.addedAt : new Date().toISOString(),
+    updatedAt:   new Date().toISOString(),
   };
 
   if (existingIndex >= 0) {
     hotels[existingIndex] = entry;
-    console.log(`[UPDATED] Target price updated for: ${url} → $${price}`);
+    console.log(`[UPDATED] "${entry.roomPackage}" at ${url} → ₪${price}`);
   } else {
     hotels.push(entry);
-    console.log(`[ADDED] Now tracking: ${url} at target $${price}`);
+    const channels = [entry.email && 'email', entry.telegram && 'telegram'].filter(Boolean).join(', ') || 'none';
+    console.log(`[ADDED]   "${entry.roomPackage}" at ${url} — target ₪${price} — notify via ${channels}`);
   }
 
   saveTrackedHotels(hotels);
-
   return res.status(200).json({
-    message: existingIndex >= 0 ? "Tracking updated successfully." : "Tracking started successfully.",
+    message: existingIndex >= 0 ? 'Tracking updated successfully.' : 'Tracking started successfully.',
     entry,
   });
 });
 
-// GET /api/track — List all tracked hotels (useful for debugging)
-app.get("/api/track", (req, res) => {
+// GET /api/track — list all tracked packages
+app.get('/api/track', (_req, res) => {
   const hotels = loadTrackedHotels();
   res.json({ count: hotels.length, hotels });
 });
 
-// DELETE /api/track/:id — Remove a tracked hotel by ID
-app.delete("/api/track/:id", (req, res) => {
+// DELETE /api/track/:id — stop tracking
+app.delete('/api/track/:id', (req, res) => {
   const { id } = req.params;
-  let hotels = loadTrackedHotels();
-  const before = hotels.length;
-  hotels = hotels.filter((h) => h.id !== id);
+  let hotels    = loadTrackedHotels();
+  const before  = hotels.length;
+  hotels        = hotels.filter((h) => h.id !== id);
 
   if (hotels.length === before) {
     return res.status(404).json({ error: `No tracked hotel found with id '${id}'.` });
@@ -108,21 +132,43 @@ app.delete("/api/track/:id", (req, res) => {
 
   saveTrackedHotels(hotels);
   console.log(`[REMOVED] Stopped tracking id: ${id}`);
-  res.json({ message: "Tracking removed successfully." });
+  res.json({ message: 'Tracking removed successfully.' });
+});
+
+// POST /api/scrape — manually trigger a scrape run (useful for testing)
+app.post('/api/scrape', (_req, res) => {
+  res.json({ message: 'Scrape job triggered. Check server logs for progress.' });
+  runScrapeJob().catch((err) => console.error('[Scraper] Manual run failed:', err.message));
 });
 
 // Health check
-app.get("/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// --- Start server ---
+// ── Cron job ─────────────────────────────────────────────────────────────────
+// Runs at minute 0 of every 2nd hour: 00:00, 02:00, 04:00, ..., 22:00
+
+cron.schedule('0 */2 * * *', () => {
+  console.log(`[Cron] Firing scheduled scrape at ${new Date().toISOString()}`);
+  runScrapeJob().catch((err) => {
+    console.error('[Cron] Scrape job failed:', err.message);
+  });
+});
+
+// ── Start server ──────────────────────────────────────────────────────────────
+
 app.listen(PORT, () => {
-  console.log(`\nBooking Price Tracker backend running on http://localhost:${PORT}`);
-  console.log(`Data file: ${DATA_FILE}`);
-  console.log("\nAvailable endpoints:");
-  console.log(`  POST   http://localhost:${PORT}/api/track   — Add/update a hotel to track`);
-  console.log(`  GET    http://localhost:${PORT}/api/track   — List all tracked hotels`);
-  console.log(`  DELETE http://localhost:${PORT}/api/track/:id — Stop tracking a hotel`);
-  console.log(`  GET    http://localhost:${PORT}/health      — Health check\n`);
+  console.log(`\nBooking Price Tracker backend — http://localhost:${PORT}`);
+  console.log(`Data file : ${DATA_FILE}`);
+  console.log('\nEndpoints:');
+  console.log(`  POST   /api/track        — Add/update a hotel to track`);
+  console.log(`  GET    /api/track        — List all tracked hotels`);
+  console.log(`  DELETE /api/track/:id    — Stop tracking`);
+  console.log(`  POST   /api/scrape       — Trigger a manual scrape run`);
+  console.log(`  GET    /health           — Health check`);
+  console.log('\nCron: scrape runs every 2 hours (0 */2 * * *)');
+  console.log('Email  :', process.env.EMAIL_USER     ? `✓ ${process.env.EMAIL_USER}` : '✗ not configured (set EMAIL_USER / EMAIL_PASS in .env)');
+  console.log('Telegram:', process.env.TELEGRAM_BOT_TOKEN ? '✓ configured' : '✗ not configured (set TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID in .env)');
+  console.log();
 });
