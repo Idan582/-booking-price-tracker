@@ -58,72 +58,119 @@ async function sendEmailAlert({ to, roomPackage, currentPrice, targetPrice, url,
     auth: { user, pass },
   });
 
-  const isRepeat  = alertCount > 0;
-  const subject   = isRepeat
-    ? `🔥 ירידת מחיר נוספת! המחיר ממשיך לצנוח - ${hotelName} 📢`
-    : `עדכון לגבי המעקב שלך בבוקינג - ${hotelName}`;
-  const newPrice  = Math.round(currentPrice).toLocaleString('he-IL');
-  const tgtPrice  = Math.round(targetPrice).toLocaleString('he-IL');
-  const headerTxt = isRepeat ? '🔥 ירידת מחיר נוספת!' : '🔔 ירידת מחיר!';
-  const headerBg  = isRepeat ? '#b71c1c' : '#003580';
+  const isRepeat = alertCount > 0;
+  const subject  = isRepeat
+    ? `🚨 ירידת מחיר נוספת! המחיר ממשיך לצנוח למלון ${hotelName}`
+    : `⚠️ התראת מחיר: ירידת מחיר למלון ${hotelName}`;
 
-  const repeatBanner = isRepeat ? `
-            <table cellpadding="0" cellspacing="0" style="width:100%;background:#fff3e0;border-radius:8px;margin-bottom:20px;border:1px solid #ffcc80;">
-              <tr>
-                <td style="padding:14px 18px;">
-                  <p style="margin:0;font-size:14px;font-weight:600;color:#e65100;">📢 המחיר ירד שוב מאז ההתראה האחרונה!</p>
-                  <p style="margin:6px 0 0;font-size:13px;color:#bf360c;">זו הזדמנות לחסוך אפילו יותר כסף — המחיר ממשיך לצנוח. כדאי להזמין עכשיו לפני שהמחיר יעלה חזרה.</p>
-                </td>
-              </tr>
-            </table>` : '';
+  const newPrice = Math.round(currentPrice).toLocaleString('he-IL');
+  const tgtPrice = Math.round(targetPrice).toLocaleString('he-IL');
+  const savings  = Math.round(targetPrice - currentPrice).toLocaleString('he-IL');
+
+  // Alert badge — doubles as the double-drop indicator (replaces separate repeatBanner)
+  const alertBadge = isRepeat
+    ? `<table cellpadding="0" cellspacing="0" style="width:100%;background:#fce4ec;border-radius:8px;margin-bottom:28px;border:1px solid #ef9a9a;">
+              <tr><td style="padding:14px 20px;">
+                <p style="margin:0;font-size:14px;font-weight:700;color:#b71c1c;">🚨 ירידת מחיר נוספת זוהתה!</p>
+                <p style="margin:6px 0 0;font-size:13px;color:#c62828;">המחיר ירד שוב מאז ההתראה האחרונה — זו הזדמנות לחסוך אפילו יותר. מומלץ לפעול לפני שהמחיר יעלה.</p>
+              </td></tr>
+            </table>`
+    : `<table cellpadding="0" cellspacing="0" style="width:100%;background:#fff8e1;border-radius:8px;margin-bottom:28px;border:1px solid #ffe082;">
+              <tr><td style="padding:14px 20px;">
+                <p style="margin:0;font-size:14px;font-weight:700;color:#f57c00;">⚠️ ירידת מחיר זוהתה</p>
+                <p style="margin:6px 0 0;font-size:13px;color:#e65100;">המחיר ירד מתחת ליעד שהגדרת. לחץ על הכפתור למטה כדי לנצל את ההזדמנות.</p>
+              </td></tr>
+            </table>`;
 
   const html = `
 <!DOCTYPE html>
 <html dir="rtl" lang="he">
-<head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#f4f6fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;direction:rtl;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fb;padding:32px 0;">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>התראת מחיר</title>
+</head>
+<body style="margin:0;padding:0;background:#f0f2f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;direction:rtl;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f2f5;padding:40px 16px;">
     <tr><td align="center">
-      <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
-        <!-- Header -->
+      <table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;">
+
+        <!-- Brand bar -->
         <tr>
-          <td style="background:${headerBg};padding:24px 32px;">
-            <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;">${headerTxt}</p>
+          <td style="background:#003580;padding:13px 32px;border-radius:10px 10px 0 0;">
+            <p style="margin:0;font-size:11px;font-weight:600;color:rgba(255,255,255,0.8);letter-spacing:1.2px;">BOOKING PRICE TRACKER</p>
           </td>
         </tr>
-        <!-- Body -->
-        <tr>
-          <td style="padding:28px 32px;">
-            ${repeatBanner}
-            <p style="margin:0 0 6px;font-size:15px;color:#555;">חדר / חבילה:</p>
-            <p style="margin:0 0 20px;font-size:16px;font-weight:600;color:#1a1a1a;">${roomPackage}</p>
 
-            <table cellpadding="0" cellspacing="0" style="width:100%;background:#f0f4ff;border-radius:8px;margin-bottom:24px;">
+        <!-- White card -->
+        <tr>
+          <td style="background:#ffffff;padding:36px 40px;border-radius:0 0 10px 10px;box-shadow:0 4px 24px rgba(0,0,0,0.09);">
+
+            <!-- Alert badge -->
+            ${alertBadge}
+
+            <!-- Hotel name & room package -->
+            <p style="margin:0 0 4px;font-size:12px;font-weight:600;color:#999;letter-spacing:0.6px;">מלון</p>
+            <p style="margin:0 0 12px;font-size:22px;font-weight:700;color:#0d1b2a;line-height:1.25;">${hotelName}</p>
+            <table cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
               <tr>
-                <td style="padding:16px 20px;text-align:center;border-left:1px solid #d9e3f7;">
-                  <p style="margin:0 0 4px;font-size:12px;color:#777;">מחיר נוכחי</p>
-                  <p style="margin:0;font-size:26px;font-weight:700;color:#003580;">₪${newPrice}</p>
-                </td>
-                <td style="padding:16px 20px;text-align:center;">
-                  <p style="margin:0 0 4px;font-size:12px;color:#777;">יעד שלך</p>
-                  <p style="margin:0;font-size:26px;font-weight:700;color:#2e7d32;">₪${tgtPrice}</p>
+                <td style="background:#f0f4ff;border-radius:6px;padding:8px 14px;">
+                  <p style="margin:0;font-size:13px;color:#3a3a5c;line-height:1.5;">${roomPackage}</p>
                 </td>
               </tr>
             </table>
 
-            <table cellpadding="0" cellspacing="0" style="width:100%;">
-              <tr><td align="center">
-                <a href="${url}" style="display:inline-block;background:#003580;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:13px 32px;border-radius:6px;">הזמן עכשיו &rarr;</a>
+            <!-- Price comparison box -->
+            <table cellpadding="0" cellspacing="0" style="width:100%;background:#f8faf8;border-radius:12px;border:1px solid #deeade;margin-bottom:28px;">
+              <tr>
+                <td style="padding:30px 32px;">
+
+                  <!-- Old price -->
+                  <p style="margin:0 0 6px;font-size:13px;font-weight:600;color:#999;">המחיר המקורי:</p>
+                  <p style="margin:0 0 22px;font-size:22px;font-weight:600;color:#bbb;"><del>&#8362;${tgtPrice}</del></p>
+
+                  <!-- Divider -->
+                  <table cellpadding="0" cellspacing="0" style="width:100%;margin-bottom:22px;">
+                    <tr><td style="border-top:1px solid #e0ede0;font-size:0;line-height:0;">&nbsp;</td></tr>
+                  </table>
+
+                  <!-- New price -->
+                  <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#2e7d32;">המחיר החדש:</p>
+                  <p style="margin:0 0 20px;font-size:52px;font-weight:700;color:#1b5e20;line-height:1;">&#8362;${newPrice}</p>
+
+                  <!-- Savings badge -->
+                  <table cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td style="background:#e8f5e9;border:1px solid #c8e6c9;border-radius:20px;padding:7px 18px;">
+                        <p style="margin:0;font-size:13px;font-weight:700;color:#2e7d32;">✓&nbsp; חיסכון של &#8362;${savings}!</p>
+                      </td>
+                    </tr>
+                  </table>
+
+                </td>
+              </tr>
+            </table>
+
+            <!-- CTA button -->
+            <table cellpadding="0" cellspacing="0" style="width:100%;margin-bottom:28px;">
+              <tr><td>
+                <a href="${url}" style="display:block;background:#003580;color:#ffffff;text-decoration:none;font-size:17px;font-weight:700;padding:18px 32px;border-radius:10px;text-align:center;letter-spacing:0.3px;">להזמנה בבוקינג &rarr;</a>
               </td></tr>
             </table>
+
+            <!-- Footer disclaimer -->
+            <p style="margin:0;font-size:12px;color:#aaa;text-align:center;line-height:1.7;">שים לב: המחירים בבוקינג משתנים בתדירות גבוהה.<br>אנו ממליצים לבדוק את ההצעה בהקדם האפשרי.</p>
+
           </td>
         </tr>
-        <!-- Footer -->
+
+        <!-- Bottom caption -->
         <tr>
-          <td style="padding:16px 32px;background:#f9fafb;border-top:1px solid #eee;">
-            <p style="margin:0;font-size:11px;color:#aaa;text-align:center;">Booking Price Tracker &bull; התראה אוטומטית</p>
+          <td style="padding:18px 0;text-align:center;">
+            <p style="margin:0;font-size:11px;color:#bbb;">Booking Price Tracker &bull; התראה אוטומטית</p>
           </td>
         </tr>
+
       </table>
     </td></tr>
   </table>
