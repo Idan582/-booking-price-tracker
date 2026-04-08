@@ -44,7 +44,7 @@ function hotelNameFromUrl(url) {
 
 // ── Email alert (Gmail SMTP) ─────────────────────────────────────────────────
 
-async function sendEmailAlert({ to, roomPackage, currentPrice, targetPrice, url, hotelName }) {
+async function sendEmailAlert({ to, roomPackage, currentPrice, targetPrice, url, hotelName, alertCount }) {
   const user = process.env.EMAIL_USER;
   const pass = process.env.EMAIL_PASS;
 
@@ -58,9 +58,24 @@ async function sendEmailAlert({ to, roomPackage, currentPrice, targetPrice, url,
     auth: { user, pass },
   });
 
-  const subject  = `עדכון לגבי המעקב שלך בבוקינג - ${hotelName}`;
-  const newPrice = Math.round(currentPrice).toLocaleString('he-IL');
-  const tgtPrice = Math.round(targetPrice).toLocaleString('he-IL');
+  const isRepeat  = alertCount > 0;
+  const subject   = isRepeat
+    ? `🔥 ירידת מחיר נוספת! המחיר ממשיך לצנוח - ${hotelName} 📢`
+    : `עדכון לגבי המעקב שלך בבוקינג - ${hotelName}`;
+  const newPrice  = Math.round(currentPrice).toLocaleString('he-IL');
+  const tgtPrice  = Math.round(targetPrice).toLocaleString('he-IL');
+  const headerTxt = isRepeat ? '🔥 ירידת מחיר נוספת!' : '🔔 ירידת מחיר!';
+  const headerBg  = isRepeat ? '#b71c1c' : '#003580';
+
+  const repeatBanner = isRepeat ? `
+            <table cellpadding="0" cellspacing="0" style="width:100%;background:#fff3e0;border-radius:8px;margin-bottom:20px;border:1px solid #ffcc80;">
+              <tr>
+                <td style="padding:14px 18px;">
+                  <p style="margin:0;font-size:14px;font-weight:600;color:#e65100;">📢 המחיר ירד שוב מאז ההתראה האחרונה!</p>
+                  <p style="margin:6px 0 0;font-size:13px;color:#bf360c;">זו הזדמנות לחסוך אפילו יותר כסף — המחיר ממשיך לצנוח. כדאי להזמין עכשיו לפני שהמחיר יעלה חזרה.</p>
+                </td>
+              </tr>
+            </table>` : '';
 
   const html = `
 <!DOCTYPE html>
@@ -72,13 +87,14 @@ async function sendEmailAlert({ to, roomPackage, currentPrice, targetPrice, url,
       <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
         <!-- Header -->
         <tr>
-          <td style="background:#003580;padding:24px 32px;">
-            <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;">🔔 ירידת מחיר!</p>
+          <td style="background:${headerBg};padding:24px 32px;">
+            <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;">${headerTxt}</p>
           </td>
         </tr>
         <!-- Body -->
         <tr>
           <td style="padding:28px 32px;">
+            ${repeatBanner}
             <p style="margin:0 0 6px;font-size:15px;color:#555;">חדר / חבילה:</p>
             <p style="margin:0 0 20px;font-size:16px;font-weight:600;color:#1a1a1a;">${roomPackage}</p>
 
@@ -331,8 +347,9 @@ async function runScrapeJob() {
 
         console.log(`[Scraper]   Current: ₪${currentPrice}  |  Target: ₪${hotel.targetPrice}`);
 
-        if (currentPrice <= hotel.targetPrice) {
-          console.log('[Scraper]   🔔 PRICE DROP — sending alerts...');
+        if (currentPrice < hotel.targetPrice) {
+          const alertCount = hotel.alertCount || 0;
+          console.log(`[Scraper]   🔔 PRICE DROP (alert #${alertCount + 1}) — sending alerts...`);
 
           if (hotel.email) {
             await sendEmailAlert({
@@ -342,6 +359,7 @@ async function runScrapeJob() {
               targetPrice:  hotel.targetPrice,
               url:          hotel.url,
               hotelName:    hotelNameFromUrl(hotel.url),
+              alertCount:   alertCount,
             }).catch((err) => console.error('[Scraper]   Email error:', err.message));
           }
 
@@ -357,6 +375,17 @@ async function runScrapeJob() {
 
           if (!hotel.email && !hotel.telegram) {
             console.warn('[Scraper]   No notification channel configured — alert skipped.');
+          }
+
+          // Advance targetPrice and increment alertCount so the next run only
+          // alerts on a further drop, and subsequent emails use the repeat subject.
+          hotel.targetPrice = currentPrice;
+          hotel.alertCount  = alertCount + 1;
+          try {
+            fs.writeFileSync(DATA_FILE, JSON.stringify(hotels, null, 2), 'utf-8');
+            console.log(`[Scraper]   ✓ targetPrice → ₪${currentPrice}, alertCount → ${hotel.alertCount} saved.`);
+          } catch (writeErr) {
+            console.error('[Scraper]   Failed to save updated fields:', writeErr.message);
           }
         } else {
           const gap = currentPrice - hotel.targetPrice;
