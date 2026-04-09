@@ -19,15 +19,8 @@ const DATA_FILE = path.join(__dirname, 'tracked_hotels.json');
 //   • Chrome extension background / popup
 //   • localhost (dev / testing)
 
-const ALLOWED_ORIGIN = /^(https:\/\/([a-z0-9-]+\.)*booking\.com|chrome-extension:\/\/[a-z0-9]+|https?:\/\/localhost(:\d+)?)$/;
-
 app.use(cors({
-  origin: function (origin, callback) {
-    // No origin header = curl / Postman / same-origin — allow
-    if (!origin) return callback(null, true);
-    if (ALLOWED_ORIGIN.test(origin)) return callback(null, true);
-    callback(new Error(`CORS: origin not allowed — ${origin}`));
-  },
+  origin: true,           // reflect any origin — host_permissions in the manifest is the real gate
   methods:        ['GET', 'POST', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type'],
 }));

@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  const BACKEND_URL = 'http://localhost:3001/api/track';
+  const BACKEND_URL = 'https://booking-price-tracker-production-6ff2.up.railway.app';
 
   // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -57,17 +57,23 @@
         justify-content: center;
       }
       #bpt-modal {
-        background: #fff;
-        border-radius: 10px;
-        padding: 28px 30px 24px;
-        width: 390px;
+        background: #f8f9fb;
+        border-radius: 12px;
+        padding: 0 0 24px;
+        width: 400px;
         max-width: calc(100vw - 32px);
         box-shadow: 0 12px 50px rgba(0,0,0,0.28);
+        border: 1.5px solid #d0daea;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         position: relative;
         z-index: 2147483647;
         direction: rtl;
         text-align: right;
+        overflow: hidden;
+      }
+      /* Inner content area restores the padding removed from the root */
+      #bpt-modal .bpt-body {
+        padding: 0 28px 0;
       }
       #bpt-modal h2 {
         margin: 0 0 4px;
@@ -229,6 +235,124 @@
         transition: background 0.15s;
       }
       #bpt-modal .bpt-ok .bpt-close-ok:hover { background: #00224f; }
+
+      /* ── Range Slider ─────────────────────────────────────────────────── */
+      .bpt-slider-section { margin: 6px 0 16px; }
+      .bpt-target-display {
+        font-size: 13px;
+        font-weight: 600;
+        color: #003580;
+        background: #eef3fb;
+        border: 1.5px solid #c2d9f5;
+        border-radius: 8px;
+        padding: 10px 14px;
+        margin-bottom: 16px;
+        text-align: center;
+        line-height: 1.5;
+        direction: rtl;
+      }
+      /* Wrapper forces LTR axis regardless of page direction */
+      .bpt-slider-track-wrap {
+        direction: ltr;
+        unicode-bidi: isolate;
+        width: 100%;
+        display: block;
+      }
+      .bpt-slider {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 6px;
+        border-radius: 3px;
+        background: #c2cfe0;
+        outline: none;
+        cursor: pointer;
+        display: block;
+        /* JS sets the gradient; this is just the fallback */
+      }
+      .bpt-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #003580;
+        cursor: pointer;
+        box-shadow: 0 2px 7px rgba(0,53,128,0.5);
+        transition: background 0.15s, transform 0.12s;
+        border: 2px solid #fff;
+      }
+      .bpt-slider::-webkit-slider-thumb:hover { background: #0055b3; transform: scale(1.18); }
+      .bpt-slider::-moz-range-thumb {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #003580;
+        cursor: pointer;
+        border: 2px solid #fff;
+        box-shadow: 0 2px 7px rgba(0,53,128,0.5);
+      }
+      .bpt-slider::-moz-range-track { background: transparent; height: 6px; border-radius: 3px; }
+      .bpt-slider-ticks {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: #aaa;
+        margin-top: 6px;
+        /* align tick labels precisely under slider endpoints */
+        padding: 0 10px;
+      }
+      .bpt-slider-ticks span:first-child { text-align: left; }
+      .bpt-slider-ticks span:last-child  { text-align: right; }
+      .bpt-submit-wrap {
+        display: flex;
+        justify-content: center;
+        margin-top: 10px;
+      }
+      .bpt-submit-btn {
+        padding: 9px 32px;
+        background: #003580;
+        color: #fff;
+        border: none;
+        border-radius: 50px;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        font-family: inherit;
+        transition: background 0.15s, box-shadow 0.15s, transform 0.1s;
+        letter-spacing: 0.4px;
+        box-shadow: 0 3px 10px rgba(0,53,128,0.3);
+      }
+      .bpt-submit-btn:hover  { background: #0055b3; box-shadow: 0 4px 14px rgba(0,53,128,0.4); transform: translateY(-1px); }
+      .bpt-submit-btn:active { background: #00224f; transform: translateY(0); box-shadow: none; }
+      .bpt-submit-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+      /* ── Branding header ──────────────────────────────────────────────── */
+      .bpt-branding {
+        text-align: center;
+        padding: 14px 0 16px;
+        margin-bottom: 16px;
+        border-bottom: 1px solid #e8edf4;
+        user-select: none;
+        direction: ltr;
+      }
+      .bpt-branding-title {
+        display: block;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 1.8px;
+        text-transform: uppercase;
+        color: #222;
+        font-family: 'Georgia', 'Times New Roman', serif;
+      }
+      .bpt-branding-sub {
+        display: block;
+        font-size: 10.5px;
+        font-weight: 400;
+        letter-spacing: 0.5px;
+        color: #888;
+        margin-top: 2px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
     `;
     document.head.appendChild(s);
   }
@@ -503,7 +627,7 @@
     const btn = document.createElement('button');
     btn.className = 'bpt-track-btn';
     btn.setAttribute('type', 'button');
-    btn.textContent = '🔔 מעקב מחיר';
+    btn.textContent = 'מעקב מחיר 🔔';
     btn.title = roomPackage;
     btn.addEventListener('click', function (e) {
       e.stopPropagation();
@@ -536,11 +660,6 @@
       ? '₪' + currentPrice.toLocaleString('he-IL')
       : 'מחיר לא זוהה';
 
-    // Pre-calculate threshold labels; fall back to '—' if price unknown
-    const fmt = function (p) { return '₪' + Math.max(1, p).toLocaleString('he-IL'); };
-    const price5  = currentPrice !== null ? fmt(Math.round(currentPrice * 0.95)) : '—';
-    const price10 = currentPrice !== null ? fmt(Math.round(currentPrice * 0.90)) : '—';
-
     const savedEmail  = localStorage.getItem(EMAIL_STORAGE_KEY) || '';
     const savedTgId   = localStorage.getItem(TG_ID_STORAGE_KEY) || '';
 
@@ -555,50 +674,63 @@
     modal.setAttribute('role', 'dialog');
     modal.setAttribute('aria-modal', 'true');
     modal.innerHTML = `
+      <div class="bpt-branding">
+        <span class="bpt-branding-title">Hotel Tracker</span>
+        <span class="bpt-branding-sub">by Idan Avraham</span>
+      </div>
       <button class="bpt-x" type="button" aria-label="סגור">×</button>
-      <h2>🔔 מעקב מחיר</h2>
-      <div class="bpt-pkg">${escapeHtml(roomPackage)}</div>
-      <div class="bpt-price">מחיר נוכחי: ${escapeHtml(priceLabel)}</div>
-      <div class="bpt-subtitle">אנחנו נבדוק את מחיר החדר הזה באופן אוטומטי ונשלח לך התראה כשהמחיר יצנח.</div>
-      <div class="bpt-q">קבל התראה דרך:</div>
-      <div class="bpt-notif-opts">
-        <label class="bpt-notif-label">
-          <input type="checkbox" id="bpt-ch-email" ${savedEmail ? 'checked' : ''} />
-          <span>מייל</span>
-        </label>
-        <div id="bpt-email-wrap" class="${savedEmail ? '' : 'bpt-hidden'}">
-          <input class="bpt-phone-input" id="bpt-email-input" type="email"
-                 placeholder="your@email.com" autocomplete="email"
-                 value="${escapeHtml(savedEmail)}" />
-          <label class="bpt-save-label">
-            <input type="checkbox" id="bpt-save-email" ${savedEmail ? 'checked' : ''} />
-            <span>שמור מייל לפעם הבאה</span>
+      <div class="bpt-body">
+        <h2>מעקב מחיר 🔔</h2>
+        <div class="bpt-pkg">${escapeHtml(roomPackage)}</div>
+        <div class="bpt-price">מחיר נוכחי: ${escapeHtml(priceLabel)}</div>
+        <div class="bpt-subtitle">אנחנו נבדוק את מחיר החדר הזה באופן אוטומטי ונשלח לך התראה כשהמחיר יצנח.</div>
+        <div class="bpt-q">קבל התראה דרך:</div>
+        <div class="bpt-notif-opts">
+          <label class="bpt-notif-label">
+            <input type="checkbox" id="bpt-ch-email" ${savedEmail ? 'checked' : ''} />
+            <span>מייל</span>
           </label>
-        </div>
-        <label class="bpt-notif-label">
-          <input type="checkbox" id="bpt-ch-telegram" ${savedTgId ? 'checked' : ''} />
-          <span>טלגרם</span>
-        </label>
-        <div id="bpt-tg-wrap" class="${savedTgId ? '' : 'bpt-hidden'}">
-          <a href="https://t.me/HotelHunterlBot" target="_blank" rel="noopener" class="bpt-tg-link">לחץ כאן להפעלת הבוט</a>
-          <div class="bpt-tg-id-row">
-            <input class="bpt-phone-input" id="bpt-tg-id-input" type="text"
-                   placeholder="Chat ID (מספר)" autocomplete="off"
-                   value="${escapeHtml(savedTgId)}" />
+          <div id="bpt-email-wrap" class="${savedEmail ? '' : 'bpt-hidden'}">
+            <input class="bpt-phone-input" id="bpt-email-input" type="email"
+                   placeholder="your@email.com" autocomplete="email"
+                   value="${escapeHtml(savedEmail)}" />
             <label class="bpt-save-label">
-              <input type="checkbox" id="bpt-save-tg-id" ${savedTgId ? 'checked' : ''} />
-              <span>שמור Chat ID לפעם הבאה</span>
+              <input type="checkbox" id="bpt-save-email" ${savedEmail ? 'checked' : ''} />
+              <span>שמור מייל לפעם הבאה</span>
             </label>
-            <button type="button" class="bpt-help-link" id="bpt-tg-help-btn">Don't know your Chat ID? Click here</button>
-            <p class="bpt-help-text bpt-hidden" id="bpt-tg-help-text">Search for <strong>@userinfobot</strong> in Telegram and send it any message — it will reply with your Chat ID number.</p>
+          </div>
+          <label class="bpt-notif-label">
+            <input type="checkbox" id="bpt-ch-telegram" ${savedTgId ? 'checked' : ''} />
+            <span>טלגרם</span>
+          </label>
+          <div id="bpt-tg-wrap" class="${savedTgId ? '' : 'bpt-hidden'}">
+            <a href="https://t.me/HotelHunterlBot" target="_blank" rel="noopener" class="bpt-tg-link">לחץ כאן להפעלת הבוט</a>
+            <div class="bpt-tg-id-row">
+              <input class="bpt-phone-input" id="bpt-tg-id-input" type="text"
+                     placeholder="Chat ID (מספר)" autocomplete="off"
+                     value="${escapeHtml(savedTgId)}" />
+              <label class="bpt-save-label">
+                <input type="checkbox" id="bpt-save-tg-id" ${savedTgId ? 'checked' : ''} />
+                <span>שמור Chat ID לפעם הבאה</span>
+              </label>
+              <button type="button" class="bpt-help-link" id="bpt-tg-help-btn">Don't know your Chat ID? Click here</button>
+              <p class="bpt-help-text bpt-hidden" id="bpt-tg-help-text">Search for <strong>@userinfobot</strong> in Telegram and send it any message — it will reply with your Chat ID number.</p>
+            </div>
           </div>
         </div>
-      </div>
-      <div class="bpt-q">מתי לשלוח התראה?</div>
-      <div class="bpt-opts">
-        <button class="bpt-opt" type="button" data-drop="any">כל ירידה במחיר (גם ב-1 ₪)</button>
-        <button class="bpt-opt" type="button" data-drop="5">ירידה של 5% (התראה מתחת ל-${escapeHtml(price5)})</button>
-        <button class="bpt-opt" type="button" data-drop="10">ירידה של 10% ומטה (התראה מתחת ל-${escapeHtml(price10)})</button>
+        <div class="bpt-q">קבע סף לירידת מחיר:</div>
+        <div class="bpt-slider-section">
+          <div class="bpt-target-display" id="bpt-target-display">טוען...</div>
+          <div class="bpt-slider-track-wrap">
+            <input type="range" class="bpt-slider" id="bpt-slider" min="1" max="99" value="10" />
+            <div class="bpt-slider-ticks">
+              <span>1%</span><span>25%</span><span>50%</span><span>75%</span><span>99%</span>
+            </div>
+          </div>
+        </div>
+        <div class="bpt-submit-wrap">
+          <button class="bpt-submit-btn" type="button" id="bpt-submit-btn">קבלת התראה על ירידת מחיר 🔔</button>
+        </div>
       </div>
     `;
 
@@ -618,11 +750,33 @@
       txt.classList.toggle('bpt-hidden');
     });
 
+    // ── Slider: live price label + track-fill ────────────────────────────────
+    var sliderEl  = modal.querySelector('#bpt-slider');
+    var displayEl = modal.querySelector('#bpt-target-display');
+
+    function updateSliderDisplay() {
+      var pct     = parseInt(sliderEl.value, 10);
+      // Map value 1–99 to fill 0%–100% so the blue always grows left→right
+      var fillPct = ((pct - 1) / 98) * 100;
+      sliderEl.style.background =
+        'linear-gradient(to right, #003580 ' + fillPct + '%, #c2cfe0 ' + fillPct + '%)';
+      if (currentPrice !== null) {
+        var target    = Math.max(1, Math.round(currentPrice * (1 - pct / 100)));
+        var formatted = target.toLocaleString('he-IL');
+        displayEl.textContent =
+          'התראה תשלח כשהמחיר ירד מתחת ל- ₪' + formatted + ' (' + pct + '% הנחה)';
+      } else {
+        displayEl.textContent = 'הנחה של ' + pct + '% (מחיר לא זוהה)';
+      }
+    }
+    sliderEl.addEventListener('input', updateSliderDisplay);
+    updateSliderDisplay(); // initialize label on open
+
     // Use a capture-phase listener on document so Booking.com's own capture
     // handlers cannot swallow the click before we see it.
     function onDocClick(e) {
-      var btn = e.target.closest('.bpt-opt');
-      if (!btn) return;                        // click was not on a save button
+      var btn = e.target.closest('#bpt-submit-btn');
+      if (!btn) return;                        // click was not on the submit button
       if (!document.getElementById('bpt-backdrop')) return; // modal not open
 
       e.stopImmediatePropagation();
@@ -635,13 +789,10 @@
       var tgIdInput    = modal.querySelector('#bpt-tg-id-input');
       var saveTgIdCb   = modal.querySelector('#bpt-save-tg-id');
 
-      var emailChecked = emailCb ? emailCb.checked : false;
-      var tgChecked    = tgCb    ? tgCb.checked    : false;
-      var email        = (emailChecked && emailInput) ? emailInput.value.trim() : null;
-      var telegramChatId = (tgChecked && tgIdInput)  ? tgIdInput.value.trim()  : null;
-
-      var payload = { emailChecked: emailChecked, tgChecked: tgChecked, email: email, telegramChatId: telegramChatId, drop: btn.getAttribute('data-drop'), currentPrice: currentPrice };
-      console.log('SAVE BUTTON CLICKED!', payload);
+      var emailChecked   = emailCb ? emailCb.checked : false;
+      var tgChecked      = tgCb    ? tgCb.checked    : false;
+      var email          = (emailChecked && emailInput) ? emailInput.value.trim() : null;
+      var telegramChatId = (tgChecked && tgIdInput)    ? tgIdInput.value.trim()  : null;
 
       // Validation
       if (!emailChecked && !tgChecked) {
@@ -678,12 +829,12 @@
         else localStorage.removeItem(TG_ID_STORAGE_KEY);
       }
 
-      var drop = btn.getAttribute('data-drop');
-      var target = drop === 'any'
-        ? Math.max(1, Math.floor(currentPrice) - 1)
-        : Math.max(1, Math.round(currentPrice * (1 - parseFloat(drop) / 100)));
+      // Read slider value and compute targetPrice
+      var sliderInput = modal.querySelector('#bpt-slider');
+      var pct         = sliderInput ? parseInt(sliderInput.value, 10) : 10;
+      var target      = Math.max(1, Math.round(currentPrice * (1 - pct / 100)));
 
-      modal.querySelectorAll('.bpt-opt').forEach(function (b) { b.disabled = true; });
+      btn.disabled = true;
       submitTracking(modal, roomPackage, target, email, tgChecked, telegramChatId);
     }
     _bptSaveHandler = onDocClick;
@@ -703,43 +854,71 @@
     if (!el) {
       el = document.createElement('p');
       el.className = 'bpt-err';
-      modal.querySelector('.bpt-opts').after(el);
+      var anchor = modal.querySelector('.bpt-submit-btn');
+      if (anchor) anchor.after(el);
+      else modal.appendChild(el);
     }
     el.textContent = msg;
-    modal.querySelectorAll('.bpt-opt').forEach(function (b) { b.disabled = false; });
+    var submitBtn = modal.querySelector('.bpt-submit-btn');
+    if (submitBtn) submitBtn.disabled = false;
   }
 
-  function submitTracking(modal, roomPackage, targetPrice, email, telegram, telegramChatId) {
-    fetch(BACKEND_URL, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({
-        url:            window.location.href,
-        roomPackage:    roomPackage,
-        targetPrice:    targetPrice,
-        email:          email          || null,
-        telegram:       telegram       || false,
-        telegramChatId: telegramChatId || null,
-      }),
-    })
-      .then(function (res) {
-        if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'שגיאת שרת'); });
-        return res.json();
-      })
-      .then(function () { showSuccess(modal, targetPrice); })
-      .catch(function (err) {
-        console.error('[Booking Tracker] Backend error:', err);
-        showErr(modal, err.message || 'לא ניתן להתחבר לשרת (פורט 3001).');
-        modal.querySelectorAll('.bpt-opt').forEach(function (b) { b.disabled = false; });
+  async function submitTracking(modal, roomPackage, targetPrice, email, telegram, telegramChatId) {
+    try {
+      const response = await fetch(BACKEND_URL + '/api/track', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          url:            window.location.href,
+          roomPackage:    roomPackage,
+          targetPrice:    targetPrice,
+          email:          email          || null,
+          telegram:       telegram       || false,
+          telegramChatId: telegramChatId || null,
+        }),
       });
+
+      const text = await response.text();
+      console.log('[Booking Tracker] Raw response (' + response.status + '):', text.substring(0, 300));
+
+      if (!response.ok) {
+        var msg = 'שגיאת שרת ' + response.status;
+        try {
+          const data = JSON.parse(text);
+          if (data.error) msg = data.error;
+        } catch (e) {
+          console.error('[Booking Tracker] Server sent HTML instead of JSON:', text.substring(0, 200));
+        }
+        throw new Error(msg);
+      }
+
+      try {
+        JSON.parse(text); // validate the success response is also valid JSON
+      } catch (e) {
+        console.error('[Booking Tracker] Success response is not JSON:', text.substring(0, 200));
+        throw new Error('תגובה לא תקינה מהשרת');
+      }
+
+      showSuccess(modal, targetPrice);
+
+    } catch (err) {
+      console.error('[Booking Tracker] submitTracking failed:', err.message);
+      showErr(modal, err.message || 'לא ניתן להתחבר לשרת.');
+    }
   }
 
   function showSuccess(modal, targetPrice) {
     modal.innerHTML = `
-      <div class="bpt-ok">
-        <div class="bpt-check">✅</div>
-        <p>המעקב הופעל בהצלחה!<br>נשלח לך התראה כשהמחיר יצנח.</p>
-        <button class="bpt-close-ok" type="button">סגור</button>
+      <div class="bpt-branding">
+        <span class="bpt-branding-title">Hotel Tracker</span>
+        <span class="bpt-branding-sub">by Idan Avraham</span>
+      </div>
+      <div class="bpt-body">
+        <div class="bpt-ok">
+          <div class="bpt-check">✅</div>
+          <p>המעקב הופעל בהצלחה!<br>נשלח לך התראה כשהמחיר יצנח.</p>
+          <button class="bpt-close-ok" type="button">סגור</button>
+        </div>
       </div>
     `;
     modal.querySelector('.bpt-close-ok').addEventListener('click', closeModal);

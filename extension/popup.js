@@ -1,4 +1,4 @@
-const BACKEND_URL = "http://localhost:3001/api/track";
+const BACKEND_URL = "https://booking-price-tracker-production-6ff2.up.railway.app";
 const INJECT_TIMEOUT_MS = 8000; // give the page 8 s to respond before falling back
 
 const hotelNameEl     = document.getElementById("hotel-name");

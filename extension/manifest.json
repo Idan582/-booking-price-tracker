@@ -10,12 +10,12 @@
   ],
   "host_permissions": [
     "*://*.booking.com/*",
-    "http://localhost/*"
+    "https://booking-price-tracker-production-6ff2.up.railway.app/*"
   ],
   "content_scripts": [
     {
-      "matches": ["*://*.booking.com/hotel/*"],
-      "js": ["content.js"],
+      "matches": [ "*://*.booking.com/hotel/*" ],
+      "js": [ "content.js" ],
       "run_at": "document_idle"
     }
   ],
