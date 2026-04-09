@@ -18,13 +18,11 @@
 
 require('dotenv').config();
 
-const { chromium } = require('playwright');
-const nodemailer   = require('nodemailer');
-const { Telegraf } = require('telegraf');
-const fs           = require('fs');
-const path         = require('path');
-
-const DATA_FILE = path.join(__dirname, 'tracked_hotels.json');
+const { chromium }    = require('playwright');
+const nodemailer      = require('nodemailer');
+const { Telegraf }    = require('telegraf');
+const mongoose        = require('mongoose');
+const TrackingRequest = require('./models/TrackingRequest');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -328,20 +326,20 @@ function extractPriceInPage(targetPkg) {
 async function runScrapeJob() {
   console.log(`\n[Scraper] ─── Price check started at ${new Date().toISOString()} ───`);
 
-  if (!fs.existsSync(DATA_FILE)) {
-    console.log('[Scraper] tracked_hotels.json not found — nothing to check.');
+  if (mongoose.connection.readyState !== 1) {
+    console.warn('[Scraper] MongoDB not connected — skipping run.');
     return;
   }
 
   let hotels;
   try {
-    hotels = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    hotels = await TrackingRequest.find().lean();
   } catch (err) {
-    console.error('[Scraper] Failed to parse tracked_hotels.json:', err.message);
+    console.error('[Scraper] Failed to load tracked hotels from DB:', err.message);
     return;
   }
 
-  if (!Array.isArray(hotels) || hotels.length === 0) {
+  if (!hotels.length) {
     console.log('[Scraper] No tracked hotels — nothing to check.');
     return;
   }
@@ -424,13 +422,14 @@ async function runScrapeJob() {
             console.warn('[Scraper]   No notification channel configured — alert skipped.');
           }
 
-          // Advance targetPrice and increment alertCount so the next run only
-          // alerts on a further drop, and subsequent emails use the repeat subject.
-          hotel.targetPrice = currentPrice;
-          hotel.alertCount  = alertCount + 1;
+          // Advance targetPrice and increment alertCount in MongoDB so the next
+          // run only alerts on a further drop, and repeat emails get the repeat subject.
           try {
-            fs.writeFileSync(DATA_FILE, JSON.stringify(hotels, null, 2), 'utf-8');
-            console.log(`[Scraper]   ✓ targetPrice → ₪${currentPrice}, alertCount → ${hotel.alertCount} saved.`);
+            await TrackingRequest.findByIdAndUpdate(hotel._id, {
+              $set: { targetPrice: currentPrice },
+              $inc: { alertCount: 1 },
+            });
+            console.log(`[Scraper]   ✓ targetPrice → ₪${currentPrice}, alertCount → ${alertCount + 1} saved.`);
           } catch (writeErr) {
             console.error('[Scraper]   Failed to save updated fields:', writeErr.message);
           }

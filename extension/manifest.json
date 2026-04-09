@@ -10,7 +10,8 @@
   ],
   "host_permissions": [
     "*://*.booking.com/*",
-    "*://*.railway.app/*"
+    "*://*.railway.app/*",
+    "https://*.railway.app/*"
   ],
   "content_scripts": [
     {
