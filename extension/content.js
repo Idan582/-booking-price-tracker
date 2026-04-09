@@ -902,7 +902,7 @@
       showSuccess(modal, targetPrice);
 
     } catch (err) {
-      console.error('[Booking Tracker] submitTracking failed:', err.message);
+      console.error('[Booking Tracker] submitTracking failed — name:', err.name, '| message:', err.message, '| full error:', err);
       showErr(modal, err.message || 'לא ניתן להתחבר לשרת.');
     }
   }

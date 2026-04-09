@@ -10,7 +10,7 @@
   ],
   "host_permissions": [
     "*://*.booking.com/*",
-    "https://booking-price-tracker-production-6ff2.up.railway.app/*"
+    "*://*.railway.app/*"
   ],
   "content_scripts": [
     {
