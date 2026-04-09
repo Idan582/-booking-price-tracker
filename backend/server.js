@@ -10,7 +10,7 @@ const cron             = require('node-cron');
 const { runScrapeJob } = require('./scraper');
 
 const app      = express();
-const PORT     = 3001;
+const PORT     = process.env.PORT || 3001;
 const DATA_FILE = path.join(__dirname, 'tracked_hotels.json');
 
 // ── CORS ─────────────────────────────────────────────────────────────────────
