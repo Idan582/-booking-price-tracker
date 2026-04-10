@@ -22,6 +22,9 @@ function fmtPrice(n) {
   return '₪' + Number(n).toLocaleString('he-IL');
 }
 
+// Column order in HTML (left → right on screen):
+//   Actions | Hotel Link | Email | Telegram | Vacation | Target | Booking | Hotel Name | Date Added
+// With dir="rtl" the user reads right-to-left, so Date Added is the first thing they see.
 function renderRow(row) {
   const hotelCell = row.hotelName
     ? `<div class="font-medium text-white text-sm">${escHtml(row.hotelName)}</div>`
@@ -59,22 +62,7 @@ function renderRow(row) {
   return `
     <tr id="row-${id}" data-search="${escHtml(searchData)}"
         class="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors group">
-      <td class="px-4 py-3 text-xs text-slate-400 whitespace-nowrap align-top pt-4">${fmtDate(row.addedAt)}</td>
-      <td class="px-4 py-3 align-top pt-4">${hotelCell}${pkgCell}</td>
-      <td class="px-4 py-3 align-top pt-4">${bookingPriceCell}</td>
-      <td class="px-4 py-3 align-top pt-4">${targetCell}</td>
-      <td class="px-4 py-3 align-top pt-4">${datesCell}</td>
-      <td class="px-4 py-3 align-top pt-4">${tgCell}</td>
-      <td class="px-4 py-3 align-top pt-4">${emailCell}</td>
-      <td class="px-4 py-3 align-top pt-4 text-center">
-        <a href="${escHtml(row.url)}" target="_blank" rel="noopener noreferrer"
-           class="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors font-medium whitespace-nowrap">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
-          </svg>
-          Open
-        </a>
-      </td>
+      <!-- col 1 (leftmost on screen) -->
       <td class="px-4 py-3 align-top pt-4 text-center">
         <button onclick="deleteRow('${id}')"
            class="inline-flex items-center gap-1.5 bg-red-500/10 hover:bg-red-500 active:bg-red-700 text-red-400 hover:text-white text-xs px-3 py-1.5 rounded-lg transition-all border border-red-500/30 hover:border-transparent font-medium whitespace-nowrap">
@@ -84,6 +72,30 @@ function renderRow(row) {
           Delete
         </button>
       </td>
+      <!-- col 2 -->
+      <td class="px-4 py-3 align-top pt-4 text-center">
+        <a href="${escHtml(row.url)}" target="_blank" rel="noopener noreferrer"
+           class="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors font-medium whitespace-nowrap">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+          </svg>
+          Open
+        </a>
+      </td>
+      <!-- col 3 -->
+      <td class="px-4 py-3 align-top pt-4">${emailCell}</td>
+      <!-- col 4 -->
+      <td class="px-4 py-3 align-top pt-4">${tgCell}</td>
+      <!-- col 5 -->
+      <td class="px-4 py-3 align-top pt-4">${datesCell}</td>
+      <!-- col 6 -->
+      <td class="px-4 py-3 align-top pt-4">${targetCell}</td>
+      <!-- col 7 -->
+      <td class="px-4 py-3 align-top pt-4">${bookingPriceCell}</td>
+      <!-- col 8 -->
+      <td class="px-4 py-3 align-top pt-4">${hotelCell}${pkgCell}</td>
+      <!-- col 9 (rightmost on screen) -->
+      <td class="px-4 py-3 text-xs text-slate-400 whitespace-nowrap align-top pt-4">${fmtDate(row.addedAt)}</td>
     </tr>`;
 }
 
@@ -111,7 +123,7 @@ function renderAdminPage(rows) {
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen p-4 md:p-8 font-sans">
 
-  <!-- Toast container -->
+  <!-- Toast container (left side in RTL layout) -->
   <div id="toast-area" class="fixed bottom-6 left-6 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
   <div class="max-w-[1700px] mx-auto">
@@ -127,6 +139,7 @@ function renderAdminPage(rows) {
       </div>
       <div class="flex items-center gap-3">
         <div class="relative">
+          <!-- Search icon on the right side of input (RTL) -->
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/>
           </svg>
@@ -168,21 +181,26 @@ function renderAdminPage(rows) {
       </div>
     </div>
 
-    <!-- ── Table ── -->
+    <!-- ── Table ──
+         dir="ltr" on the table locks physical column order regardless of page RTL.
+         Columns are written LEFT→RIGHT in HTML as:
+           Actions | Hotel Link | Email | Telegram | Vacation | Target | Booking | Hotel Name | Date Added
+         So on screen the rightmost column is Date Added and leftmost is Actions.
+    -->
     <div class="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden shadow-xl">
       <div class="overflow-x-auto">
-        <table class="w-full">
+        <table class="w-full" dir="ltr">
           <thead>
             <tr class="bg-slate-700/40 text-slate-400 text-xs font-semibold uppercase tracking-wider border-b border-slate-700">
-              <th class="px-4 py-3 text-right whitespace-nowrap">Date Added</th>
-              <th class="px-4 py-3 text-right whitespace-nowrap">Hotel Name</th>
-              <th class="px-4 py-3 text-right whitespace-nowrap">Booking Price</th>
-              <th class="px-4 py-3 text-right whitespace-nowrap">Target Price + %</th>
-              <th class="px-4 py-3 text-right whitespace-nowrap">Vacation Dates</th>
-              <th class="px-4 py-3 text-right whitespace-nowrap">Telegram ID</th>
-              <th class="px-4 py-3 text-right whitespace-nowrap">Email</th>
-              <th class="px-4 py-3 text-center whitespace-nowrap">Hotel Link</th>
               <th class="px-4 py-3 text-center whitespace-nowrap">Actions</th>
+              <th class="px-4 py-3 text-center whitespace-nowrap">Hotel Link</th>
+              <th class="px-4 py-3 text-left  whitespace-nowrap">Email</th>
+              <th class="px-4 py-3 text-left  whitespace-nowrap">Telegram ID</th>
+              <th class="px-4 py-3 text-left  whitespace-nowrap">Vacation Dates</th>
+              <th class="px-4 py-3 text-left  whitespace-nowrap">Target Price + %</th>
+              <th class="px-4 py-3 text-left  whitespace-nowrap">Booking Price</th>
+              <th class="px-4 py-3 text-left  whitespace-nowrap">Hotel Name</th>
+              <th class="px-4 py-3 text-left  whitespace-nowrap">Date Added</th>
             </tr>
           </thead>
           <tbody id="table-body">
@@ -234,10 +252,9 @@ function renderAdminPage(rows) {
         if (row) {
           row.style.transition = 'opacity 0.3s, transform 0.3s';
           row.style.opacity    = '0';
-          row.style.transform  = 'translateX(16px)';
+          row.style.transform  = 'translateX(-16px)';
           setTimeout(function () {
             row.remove();
-            /* update count */
             var remaining = tableBody.querySelectorAll('tr[id^="row-"]:not([style*="display: none"])').length;
             if (visibleCount) visibleCount.textContent = remaining;
           }, 300);
@@ -248,7 +265,7 @@ function renderAdminPage(rows) {
       }
     }
 
-    /* ── Toast helper ── */
+    /* ── Toast ── */
     function showToast(msg, type) {
       var area  = document.getElementById('toast-area');
       var toast = document.createElement('div');
