@@ -437,45 +437,66 @@
     checkIn  = checkIn  ? checkIn.trim()  || null : null;
     checkOut = checkOut ? checkOut.trim() || null : null;
 
-    // ── Hotel name: try selectors in priority order, then h1, then page title ──
+    // ── Hotel name: 5-level fallback chain ────────────────────────────────────
     var hotelName = null;
 
-    // 1. Most specific selectors
-    var specificSelectors = [
+    // 1. DOM selectors — tried in priority order
+    var domSelectors = [
       'h2.pp-header__title',
+      '.pp-header__title',
       '[data-testid="header-hotel-name"]',
       '[data-testid="property-header-name"]',
       '.hp__hotel-name',
       '#hp_hotel_name',
       '[itemprop="name"]',
       '.bui-property-name__name',
+      '[class*="headerTitle"]',
+      '[class*="PropertyTitle"]',
+      '[class*="hotel-name"]',
+      '[class*="hotelName"]',
     ];
-    for (var si = 0; si < specificSelectors.length; si++) {
-      var el = document.querySelector(specificSelectors[si]);
-      if (el) {
-        var t = cleanText(el);
-        if (t) { hotelName = t; break; }
+    for (var si = 0; si < domSelectors.length; si++) {
+      var candidate = document.querySelector(domSelectors[si]);
+      if (candidate) {
+        var ct = cleanText(candidate);
+        if (ct && ct.length > 1 && ct.length < 200) { hotelName = ct; break; }
       }
     }
 
-    // 2. Any h1 on the page
+    // 2. First <h1> on the page
     if (!hotelName) {
-      var h1 = document.querySelector('h1');
-      if (h1) hotelName = cleanText(h1) || null;
+      var h1el = document.querySelector('h1');
+      if (h1el) {
+        var h1t = cleanText(h1el);
+        if (h1t && h1t.length > 1 && h1t.length < 200) hotelName = h1t;
+      }
     }
 
-    // 3. Page title — "Hotel Name - Booking.com" or "Hotel Name | Booking.com"
+    // 3. URL slug — guaranteed to exist on every Booking.com hotel page.
+    //    URL pattern: /hotel/{country}/{slug}.{lang}.html
+    //    e.g. /hotel/il/hilton-tel-aviv.he.html  →  "Hilton Tel Aviv"
+    if (!hotelName) {
+      var slugMatch = window.location.pathname.match(/\/hotel\/[^/]+\/([^/.]+)/);
+      if (slugMatch) {
+        hotelName = slugMatch[1]
+          .split('-')
+          .map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1); })
+          .join(' ');
+      }
+    }
+
+    // 4. Page title stripped of " - Booking.com"
     if (!hotelName) {
       var titleMatch = document.title.match(/^(.+?)(?:\s*[-–|]\s*(?:Booking\.com|בוקינג\.קום))/i);
       if (titleMatch) hotelName = titleMatch[1].trim() || null;
     }
 
-    // 4. Raw title as absolute last resort
+    // 5. Raw document.title — absolute last resort, will never be empty
     if (!hotelName && document.title) {
       hotelName = document.title.trim() || null;
     }
 
-    console.log('[BPT] meta — checkIn:', checkIn, '| checkOut:', checkOut, '| hotel:', hotelName);
+    console.log('[BPT] meta — hotel:', hotelName, '| checkIn:', checkIn, '| checkOut:', checkOut);
     return { hotelName: hotelName || null, checkIn: checkIn || null, checkOut: checkOut || null };
   }
 
