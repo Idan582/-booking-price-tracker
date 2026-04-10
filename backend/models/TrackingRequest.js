@@ -45,6 +45,11 @@ const trackingSchema = new mongoose.Schema(
     rooms:          { type: Number,  default: null },
     originalPrice:  { type: Number,  default: null },
     alertCount:     { type: Number,  default: 0 },
+    alertSent:      { type: Boolean, default: false },
+    alertClicks:    {
+      email:    { type: Number, default: 0 },
+      telegram: { type: Number, default: 0 },
+    },
   },
   {
     // Mongoose auto-manages createdAt / updatedAt

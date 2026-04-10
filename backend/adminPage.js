@@ -68,6 +68,18 @@ function renderRow(row) {
     ? `<div class="text-xs text-slate-300" dir="rtl">${stayParts.join(' | ')}</div>${roomTypeText}`
     : `<span class="text-slate-500 italic text-xs">N/A</span>`;
 
+  const emailClicks    = (row.alertClicks && row.alertClicks.email)    || 0;
+  const telegramClicks = (row.alertClicks && row.alertClicks.telegram) || 0;
+  const totalClicks    = emailClicks + telegramClicks;
+  let engagementCell;
+  if (!row.alertSent) {
+    engagementCell = `<span class="text-slate-500 italic text-xs" dir="rtl">לא נשלחה התראה</span>`;
+  } else if (totalClicks === 0) {
+    engagementCell = `<span class="text-amber-400 text-xs" dir="rtl">טרם נכנס</span>`;
+  } else {
+    engagementCell = `<span class="text-emerald-400 text-xs font-semibold">📧 ${emailClicks} | 📱 ${telegramClicks}</span>`;
+  }
+
   const id = escHtml(String(row._id));
   const searchData = [row.hotelName, row.roomPackage, row.email, row.telegramChatId]
     .filter(Boolean).join(' ').toLowerCase();
@@ -82,6 +94,7 @@ function renderRow(row) {
       <td class="px-4 py-3 align-top pt-4">${bookingPriceCell}</td>
       <td class="px-4 py-3 align-top pt-4">${hotelCell}${pkgCell}</td>
       <td class="px-4 py-3 align-top pt-4">${stayCell}</td>
+      <td class="px-4 py-3 align-top pt-4">${engagementCell}</td>
       <td class="px-4 py-3 text-xs text-slate-400 whitespace-nowrap align-top pt-4">${fmtDate(row.addedAt)}</td>
       <td class="px-4 py-3 align-top pt-4 text-center">
         <a href="${escHtml(row.url)}" target="_blank" rel="noopener noreferrer"
@@ -204,13 +217,14 @@ function renderAdminPage(rows) {
               <th class="px-4 py-3 text-left  whitespace-nowrap">Booking Price</th>
               <th class="px-4 py-3 text-left  whitespace-nowrap">Hotel Name</th>
               <th class="px-4 py-3 text-left  whitespace-nowrap">Stay Details</th>
+              <th class="px-4 py-3 text-left  whitespace-nowrap">מעורבות מהתראות</th>
               <th class="px-4 py-3 text-left  whitespace-nowrap">Date Added</th>
               <th class="px-4 py-3 text-center whitespace-nowrap">Hotel Link</th>
               <th class="px-4 py-3 text-center whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody id="table-body">
-            ${tableRows || '<tr><td colspan="10" class="px-4 py-20 text-center text-slate-500 text-sm">No tracking requests found.</td></tr>'}
+            ${tableRows || '<tr><td colspan="11" class="px-4 py-20 text-center text-slate-500 text-sm">No tracking requests found.</td></tr>'}
           </tbody>
         </table>
       </div>
