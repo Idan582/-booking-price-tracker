@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  const BACKEND_URL = 'https://booking-price-tracker-production-6ff2.up.railway.app';
+  const BACKEND_URL = 'https://booking-price-tracker-production-3aae.up.railway.app';
 
   // ── Styles ──────────────────────────────────────────────────────────────────
 
