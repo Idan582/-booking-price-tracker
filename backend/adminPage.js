@@ -40,8 +40,9 @@ function renderRow(row) {
   const discountPct = (row.originalPrice && row.targetPrice && row.originalPrice > row.targetPrice)
     ? Math.round((1 - row.targetPrice / row.originalPrice) * 100)
     : null;
-  const targetCell = `<div class="font-semibold text-amber-400">${fmtPrice(row.targetPrice)}</div>`
-    + (discountPct ? `<div class="text-xs text-slate-400 mt-0.5">−${discountPct}% discount</div>` : '');
+  const targetCell = `<div class="font-semibold text-amber-400">${fmtPrice(row.targetPrice)}`
+    + (discountPct ? ` <span class="text-slate-400 font-normal">(${discountPct}%)</span>` : '')
+    + `</div>`;
 
   const datesCell = (row.checkIn && row.checkOut)
     ? `<div class="text-xs text-slate-300">${escHtml(row.checkIn)}</div><div class="text-xs text-slate-400">→ ${escHtml(row.checkOut)}</div>`
