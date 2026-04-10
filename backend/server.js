@@ -7,27 +7,27 @@ const cors             = require('cors');
 const basicAuth        = require('express-basic-auth');
 const mongoose         = require('mongoose');
 const cron             = require('node-cron');
-const { runScrapeJob }   = require('./scraper');
-const TrackingRequest    = require('./models/TrackingRequest');
+const { runScrapeJob }    = require('./scraper');
+const TrackingRequest     = require('./models/TrackingRequest');
 const { renderAdminPage } = require('./adminPage');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
-// ── Basic Auth middleware ─────────────────────────────────────────────────────
+// ── HTTP Basic Auth ───────────────────────────────────────────────────────────
 const adminAuth = basicAuth({
   users: {
     [process.env.ADMIN_USERNAME || 'admin']: process.env.ADMIN_PASSWORD || 'changeme',
   },
-  challenge: true,          // sends WWW-Authenticate header → browser shows login dialog
+  challenge: true,
   realm: 'Booking Price Tracker Admin',
 });
 
-// ── CORS — must be first middleware ──────────────────────────────────────────
+// ── Global middleware ─────────────────────────────────────────────────────────
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-// ── MongoDB connection ────────────────────────────────────────────────────────
+// ── MongoDB ───────────────────────────────────────────────────────────────────
 const MONGODB_URI = process.env.MONGODB_URI;
 if (MONGODB_URI) {
   mongoose.connect(MONGODB_URI)
@@ -37,6 +37,7 @@ if (MONGODB_URI) {
   console.warn('[DB] MONGODB_URI not set — add it as a Railway env variable.');
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function isValidBookingUrl(url) {
   try {
     const p = new URL(url);
@@ -44,9 +45,13 @@ function isValidBookingUrl(url) {
   } catch { return false; }
 }
 
-// ── POST /api/track — add or update a tracked package ────────────────────────
+// ── POST /api/track  (public — called by the Chrome extension) ───────────────
 app.post('/api/track', async (req, res) => {
-  const { url, roomPackage, roomType, targetPrice, originalPrice, hotelName, checkIn, checkOut, guests, rooms, email, telegram, telegramChatId } = req.body;
+  const {
+    url, roomPackage, roomType, targetPrice, originalPrice,
+    hotelName, checkIn, checkOut, guests, rooms,
+    email, telegram, telegramChatId,
+  } = req.body;
 
   if (!url || !roomPackage || targetPrice === undefined || targetPrice === null)
     return res.status(400).json({ error: "'url', 'roomPackage', and 'targetPrice' are required." });
@@ -62,8 +67,7 @@ app.post('/api/track', async (req, res) => {
   try {
     const filter = { url, roomPackage: roomPackage.trim() };
     const parsedOriginal = (originalPrice != null && !isNaN(parseFloat(originalPrice)))
-      ? parseFloat(originalPrice)
-      : null;
+      ? parseFloat(originalPrice) : null;
 
     const update = {
       $set: {
@@ -71,27 +75,24 @@ app.post('/api/track', async (req, res) => {
         email:          email          || null,
         telegram:       telegram === true,
         telegramChatId: telegramChatId || null,
-        // Always overwrite so re-submissions fix previously-null fields
-        ...(parsedOriginal            && { originalPrice: parsedOriginal }),
-        ...(roomType                  && { roomType }),
-        ...(hotelName                 && { hotelName }),
-        ...(checkIn                   && { checkIn }),
-        ...(checkOut                  && { checkOut }),
-        ...(guests != null && !isNaN(Number(guests)) && { guests: Number(guests) }),
-        ...(rooms  != null && !isNaN(Number(rooms))  && { rooms:  Number(rooms)  }),
+        ...(parsedOriginal                                     && { originalPrice: parsedOriginal }),
+        ...(roomType                                           && { roomType }),
+        ...(hotelName                                          && { hotelName }),
+        ...(checkIn                                            && { checkIn }),
+        ...(checkOut                                           && { checkOut }),
+        ...(guests != null && !isNaN(Number(guests))           && { guests: Number(guests) }),
+        ...(rooms  != null && !isNaN(Number(rooms))            && { rooms:  Number(rooms)  }),
       },
       $setOnInsert: { alertCount: 0 },
     };
+
     const doc = await TrackingRequest.findOneAndUpdate(filter, update, {
-      new:    true,
-      upsert: true,
-      setDefaultsOnInsert: true,
-      runValidators: true,
+      new: true, upsert: true, setDefaultsOnInsert: true, runValidators: true,
     });
 
-    const isNew = doc.addedAt.getTime() === doc.updatedAt.getTime();
+    const isNew    = doc.addedAt.getTime() === doc.updatedAt.getTime();
     const channels = [doc.email && 'email', doc.telegram && 'telegram'].filter(Boolean).join(', ') || 'none';
-    console.log(`[${isNew ? 'ADDED' : 'UPDATED'}] "${doc.roomPackage}" at ${url} → ₪${price} — notify: ${channels}`);
+    console.log(`[${isNew ? 'ADDED' : 'UPDATED'}] "${doc.roomPackage}" → ₪${price} — notify: ${channels}`);
 
     return res.status(200).json({
       message: isNew ? 'Tracking started successfully.' : 'Tracking updated successfully.',
@@ -103,7 +104,7 @@ app.post('/api/track', async (req, res) => {
   }
 });
 
-// ── GET /api/track — list all tracked packages (admin only) ──────────────────
+// ── GET /api/track  (admin) ───────────────────────────────────────────────────
 app.get('/api/track', adminAuth, async (_req, res) => {
   try {
     const hotels = await TrackingRequest.find().sort({ addedAt: -1 }).lean();
@@ -113,25 +114,25 @@ app.get('/api/track', adminAuth, async (_req, res) => {
   }
 });
 
-// ── DELETE /api/track/:id — stop tracking (admin only) ───────────────────────
+// ── DELETE /api/track/:id  (admin) ────────────────────────────────────────────
 app.delete('/api/track/:id', adminAuth, async (req, res) => {
   try {
     const doc = await TrackingRequest.findByIdAndDelete(req.params.id);
     if (!doc) return res.status(404).json({ error: `No entry found with id '${req.params.id}'.` });
-    console.log(`[REMOVED] Stopped tracking id: ${req.params.id}`);
+    console.log(`[REMOVED] id: ${req.params.id}`);
     res.json({ message: 'Tracking removed successfully.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ── POST /api/scrape — manually trigger a scrape (admin only) ────────────────
+// ── POST /api/scrape  (admin) ─────────────────────────────────────────────────
 app.post('/api/scrape', adminAuth, (_req, res) => {
   res.json({ message: 'Scrape job triggered. Check server logs.' });
   runScrapeJob().catch((err) => console.error('[Scraper] Manual run failed:', err.message));
 });
 
-// ── GET /admin — Basic-Auth-protected dashboard ───────────────────────────────
+// ── GET /admin  (admin) ───────────────────────────────────────────────────────
 app.get('/admin', adminAuth, async (_req, res) => {
   try {
     const rows = await TrackingRequest.find().sort({ addedAt: -1 }).lean();
@@ -141,11 +142,11 @@ app.get('/admin', adminAuth, async (_req, res) => {
   }
 });
 
-// ── GET /health ───────────────────────────────────────────────────────────────
+// ── GET /health  (public) ─────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
   res.json({
-    status:   'ok',
-    db:       mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    status:    'ok',
+    db:        mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
     timestamp: new Date().toISOString(),
   });
 });
@@ -159,14 +160,14 @@ cron.schedule('0 */2 * * *', () => {
 // ── Start ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\nBooking Price Tracker — port ${PORT}`);
-  console.log(`  POST   /api/track     — Add/update tracking (public)`);
-  console.log(`  GET    /api/track     — List all entries    (admin)`);
-  console.log(`  DELETE /api/track/:id — Stop tracking       (admin)`);
-  console.log(`  POST   /api/scrape    — Manual scrape       (admin)`);
-  console.log(`  GET    /admin         — Dashboard           (admin)`);
-  console.log(`  GET    /health        — Health check        (public)`);
-  console.log(`\nAdmin   : ${process.env.ADMIN_USERNAME     ? '✓ ' + process.env.ADMIN_USERNAME : '✗ using default (set ADMIN_USERNAME)'}`);
-  console.log(`Email   : ${process.env.EMAIL_USER          ? '✓ ' + process.env.EMAIL_USER     : '✗ not set'}`);
-  console.log(`Telegram: ${process.env.TELEGRAM_BOT_TOKEN  ? '✓ configured'                   : '✗ not set'}`);
-  console.log(`MongoDB : ${MONGODB_URI                     ? '✓ URI present'                  : '✗ MONGODB_URI not set'}\n`);
+  console.log(`  POST   /api/track     — public`);
+  console.log(`  GET    /api/track     — admin`);
+  console.log(`  DELETE /api/track/:id — admin`);
+  console.log(`  POST   /api/scrape    — admin`);
+  console.log(`  GET    /admin         — admin`);
+  console.log(`  GET    /health        — public`);
+  console.log(`\nAdmin   : ${process.env.ADMIN_USERNAME    ? '✓ ' + process.env.ADMIN_USERNAME : '✗ using default'}`);
+  console.log(`Email   : ${process.env.EMAIL_USER         ? '✓ ' + process.env.EMAIL_USER     : '✗ not set'}`);
+  console.log(`Telegram: ${process.env.TELEGRAM_BOT_TOKEN ? '✓ configured'                   : '✗ not set'}`);
+  console.log(`MongoDB : ${MONGODB_URI                    ? '✓ URI present'                  : '✗ not set'}\n`);
 });
