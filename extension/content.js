@@ -71,7 +71,6 @@
         text-align: right;
         overflow: hidden;
       }
-      /* Inner content area restores the padding removed from the root */
       #bpt-modal .bpt-body {
         padding: 0 28px 0;
       }
@@ -251,7 +250,6 @@
         line-height: 1.5;
         direction: rtl;
       }
-      /* Wrapper forces LTR axis regardless of page direction */
       .bpt-slider-track-wrap {
         direction: ltr;
         unicode-bidi: isolate;
@@ -268,7 +266,6 @@
         outline: none;
         cursor: pointer;
         display: block;
-        /* JS sets the gradient; this is just the fallback */
       }
       .bpt-slider::-webkit-slider-thumb {
         -webkit-appearance: none;
@@ -299,7 +296,6 @@
         font-size: 11px;
         color: #aaa;
         margin-top: 6px;
-        /* align tick labels precisely under slider endpoints */
         padding: 0 10px;
       }
       .bpt-slider-ticks span:first-child { text-align: left; }
@@ -326,7 +322,6 @@
       .bpt-submit-btn:hover  { background: #0055b3; box-shadow: 0 4px 14px rgba(0,53,128,0.4); transform: translateY(-1px); }
       .bpt-submit-btn:active { background: #00224f; transform: translateY(0); box-shadow: none; }
       .bpt-submit-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
-      /* ── Branding header ──────────────────────────────────────────────── */
       .bpt-branding {
         text-align: center;
         padding: 14px 0 16px;
@@ -363,25 +358,87 @@
     return el ? el.textContent.replace(/\s+/g, ' ').trim() : '';
   }
 
-  function parsePrice(el) {
-    if (!el) return null;
-    // Strip everything except digits, comma, dot — then remove comma thousands separators
-    const raw = el.textContent.replace(/[^\d.,]/g, '').replace(/,/g, '');
-    const num  = parseFloat(raw);
-    return isNaN(num) || num <= 0 ? null : num;
-  }
-
   function escapeHtml(s) {
     return String(s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;')
       .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  // ── Page-level metadata (hotel name + dates) ─────────────────────────────────
+  // ── Price extraction ─────────────────────────────────────────────────────────
+
+  // Parse all ₪ prices found in a text string (handles both ₪NNN and NNN ₪).
+  // Returns an array of positive integers.
+  function findPricesInText(text) {
+    const results = [];
+    // Match: ₪ 3,670  OR  3,670 ₪  OR  ILS 3,670
+    const re = /(?:₪|ILS)\s*([\d,.]+)|([\d,.]+)\s*₪/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const raw = (m[1] || m[2]).replace(/,/g, '').replace(/\./g, '');
+      const num = parseInt(raw, 10);
+      if (num >= 100 && num <= 100000) results.push(num); // sanity bounds
+    }
+    return results;
+  }
+
+  // Walk all text nodes in a container, collect every price, return the minimum
+  // (the minimum = the discounted/final price, not the crossed-out original).
+  function extractPriceFromContainer(container) {
+    if (!container) return null;
+
+    // 1. Try known price data-testid elements first (most precise)
+    const PRICE_SELS = [
+      '[data-testid="price-for-x-nights"]',
+      '[data-testid="price-and-discounted-price"]',
+      '[data-testid="recommended-units-price"]',
+      '[data-testid="offer-price"]',
+      '[data-testid="prco-wrapper"]',
+      '[data-testid="price_and_discounted_price"]',
+      '.hprt-price-price',
+      '.bui-price-display__value',
+      '[class*="finalPrice"]',
+      '[class*="prco-inline"]',
+      '[class*="price-value"]',
+      '[class*="Price__value"]',
+      '[class*="prco-text"]',
+      '[class*="priceText"]',
+    ];
+
+    for (var i = 0; i < PRICE_SELS.length; i++) {
+      var el = container.querySelector(PRICE_SELS[i]);
+      if (!el) continue;
+      var prices = findPricesInText(el.textContent);
+      if (prices.length > 0) {
+        // Return the smallest price found (= final discounted price)
+        return Math.min.apply(null, prices);
+      }
+    }
+
+    // 2. Full text-node walk as last resort — return minimum price found
+    var walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+    var node;
+    var allPrices = [];
+    while ((node = walker.nextNode())) {
+      var found = findPricesInText(node.textContent);
+      allPrices = allPrices.concat(found);
+    }
+    return allPrices.length > 0 ? Math.min.apply(null, allPrices) : null;
+  }
+
+  // ── Page-level metadata (hotel name + dates from URL) ────────────────────────
 
   function scrapePageMeta() {
-    // ── Hotel name ─────────────────────────────────────────────────────────────
-    const hotelNameEl = document.querySelector(
+    // ── Dates: URL params are the most reliable source ─────────────────────────
+    var params   = new URLSearchParams(window.location.search);
+    var checkIn  = params.get('checkin')  || params.get('check_in')  || null;
+    var checkOut = params.get('checkout') || params.get('check_out') || null;
+
+    // Trim and nullify empty strings
+    checkIn  = checkIn  ? checkIn.trim()  || null : null;
+    checkOut = checkOut ? checkOut.trim() || null : null;
+
+    // ── Hotel name: try DOM selectors, fall back to page title ─────────────────
+    var hotelNameEl = document.querySelector(
       '[data-testid="header-hotel-name"], ' +
       '[data-testid="property-header-name"], ' +
       'h2.pp-header__title, ' +
@@ -392,50 +449,21 @@
       '[itemprop="name"], ' +
       '.bui-property-name__name'
     );
-    let hotelName = hotelNameEl ? cleanText(hotelNameEl) : null;
+    var hotelName = hotelNameEl ? cleanText(hotelNameEl) : null;
+
     if (!hotelName) {
-      // Fallback: page title is usually "Hotel Name - Booking.com"
-      const m = document.title.match(/^(.+?)(?:\s*[-–]\s*(?:Booking\.com|בוקינג\.קום))?$/i);
-      if (m) hotelName = m[1].trim() || null;
+      // Page title format: "Hotel Name - Booking.com" or "Hotel Name | Booking.com"
+      var titleMatch = document.title.match(/^(.+?)(?:\s*[-–|]\s*(?:Booking\.com|בוקינג\.קום))/i);
+      if (titleMatch) hotelName = titleMatch[1].trim() || null;
     }
 
-    // ── Dates — URL params first, then DOM ─────────────────────────────────────
-    const params   = new URLSearchParams(window.location.search);
-    let checkIn    = params.get('checkin')  || params.get('check_in')  || null;
-    let checkOut   = params.get('checkout') || params.get('check_out') || null;
-
-    if (!checkIn || !checkOut) {
-      // Try the search-box date fields visible on the hotel page
-      const ciEl = document.querySelector(
-        '[data-testid="date-display-field-start"], ' +
-        '[data-testid="checkin-textbox"], ' +
-        'input[name="checkin"], ' +
-        '[data-testid="search-field-checkin-label"], ' +
-        '.sb-date-field__display:first-of-type'
-      );
-      const coEl = document.querySelector(
-        '[data-testid="date-display-field-end"], ' +
-        '[data-testid="checkout-textbox"], ' +
-        'input[name="checkout"], ' +
-        '[data-testid="search-field-checkout-label"], ' +
-        '.sb-date-field__display:last-of-type'
-      );
-      if (ciEl) checkIn  = checkIn  || (ciEl.value  || cleanText(ciEl))  || null;
-      if (coEl) checkOut = checkOut || (coEl.value || cleanText(coEl)) || null;
-    }
-
-    // Normalise: trim whitespace, convert empty strings to null
-    if (checkIn)  checkIn  = checkIn.trim()  || null;
-    if (checkOut) checkOut = checkOut.trim() || null;
-
-    console.log('[Booking Tracker] Meta — hotel:', hotelName, '| in:', checkIn, '| out:', checkOut);
-    return { hotelName, checkIn, checkOut };
+    console.log('[BPT] meta — checkIn:', checkIn, '| checkOut:', checkOut, '| hotel:', hotelName);
+    return { hotelName: hotelName || null, checkIn: checkIn || null, checkOut: checkOut || null };
   }
 
   // ── Room name extraction ─────────────────────────────────────────────────────
-  // Walk UP from a container, searching for a room-name element at each level.
 
-  const ROOM_NAME_SELS = [
+  var ROOM_NAME_SELS = [
     '.hprt-roomtype-link',
     '[data-testid="roomtype-name"]',
     '[data-testid="room-type-name"]',
@@ -449,9 +477,9 @@
   ].join(',');
 
   function findRoomName(startEl) {
-    let el = startEl;
-    for (let i = 0; i < 14 && el; i++) {
-      const hit = el.querySelector(ROOM_NAME_SELS);
+    var el = startEl;
+    for (var i = 0; i < 14 && el; i++) {
+      var hit = el.querySelector(ROOM_NAME_SELS);
       if (hit) return cleanText(hit);
       el = el.parentElement;
     }
@@ -460,7 +488,7 @@
 
   // ── Condition extraction ─────────────────────────────────────────────────────
 
-  const COND_SELS = [
+  var COND_SELS = [
     '[data-testid="cancellation-policy-text"]',
     '[data-testid*="cancel"]',
     '[data-testid="meal-plan-text"]',
@@ -477,11 +505,11 @@
   ].join(',');
 
   function buildPackage(container, roomName) {
-    const name  = (roomName || 'חדר').trim();
-    const parts = [name];
+    var name  = (roomName || 'חדר').trim();
+    var parts = [name];
     if (container) {
       container.querySelectorAll(COND_SELS).forEach(function (el) {
-        const t = cleanText(el);
+        var t = cleanText(el);
         if (t && t !== name && !parts.includes(t) && t.length <= 120) parts.push(t);
       });
     }
@@ -489,11 +517,8 @@
   }
 
   // ── Core injection ───────────────────────────────────────────────────────────
-  //
-  // Selectors for reserve/CTA buttons — data-testid attributes are stable across
-  // all Booking.com locales (including Hebrew RTL UI).
 
-  const CTA_SELS = [
+  var CTA_SELS = [
     '[data-testid="reserve-button"]',
     '[data-testid="submit-button"]',
     '[data-testid="cta-button"]',
@@ -507,84 +532,30 @@
     'a[data-testid*="reserve"]',
   ].join(',');
 
-  // Selectors for price elements — tried in priority order (updated for 2026 Booking.com).
-  const PRICE_EL_SELS = [
-    '[data-testid="price-and-discounted-price"]',
-    '[data-testid="recommended-units-price"]',
-    '[data-testid="price-for-x-nights"]',
-    '[data-testid="prco-wrapper"]',
-    '[data-testid="price_and_discounted_price"]',
-    '[data-testid="offer-price"]',
-    '.hprt-price-price',
-    '.bui-price-display__value',
-    '[class*="finalPrice"]',
-    '[class*="prco-inline"]',
-    '[class*="price-value"]',
-    '[class*="Price__value"]',
-    '[class*="prco-text"]',
-    '[class*="priceText"]',
-    '[class*="discountedPrice"]',
-  ];
-
-  // Fallback: text-walk an element tree looking for ₪NNN pattern.
-  function parsePriceFromText(container) {
-    if (!container) return null;
-    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
-    let node;
-    while ((node = walker.nextNode())) {
-      const match = node.textContent.match(/(?:₪|ILS)\s*([\d,]+)/);
-      if (match) {
-        const num = parseInt(match[1].replace(/,/g, ''), 10);
-        if (num > 100) return num; // sanity: hotel prices are at least ₪100
-      }
-    }
-    return null;
-  }
-
-  // Try all PRICE_EL_SELS within a container, then fall back to text scan.
-  function extractPrice(container) {
-    for (const sel of PRICE_EL_SELS) {
-      const el = container.querySelector(sel);
-      if (el) {
-        const p = parsePrice(el);
-        if (p) return p;
-      }
-    }
-    return parsePriceFromText(container);
-  }
-
   function injectButtons() {
-    console.log('[Booking Tracker] Scanning for rooms...');
-    let injected = 0;
+    console.log('[BPT] Scanning for rooms...');
+    var injected = 0;
 
     // ── Strategy 1: Classic hprt table ──────────────────────────────────────
-    // Walk each <tbody tr> explicitly. Track the room name across rowspan groups.
-    // Inject into the conditions or price cell — NEVER into .hprt-table-cell-roomtype.
-
-    const table = document.querySelector(
+    var table = document.querySelector(
       'table.hprt-table, #hprt-table, [data-selenium="hotel-availability-table"]'
     );
 
     if (table) {
-      let currentRoomName = '';
+      var currentRoomName = '';
 
       table.querySelectorAll('tbody tr').forEach(function (row) {
-        // Room name appears only in the first row of each rowspan group
-        const nameEl = row.querySelector(
+        var nameEl = row.querySelector(
           '.hprt-roomtype-link, [data-selenium="roomName"] a, ' +
           '.hprt-roomtype-name, [data-testid="roomtype-name"]'
         );
         if (nameEl) currentRoomName = cleanText(nameEl);
         if (!currentRoomName) return;
 
-        // Offer rows always have a price — skip rows that don't
-        const price = extractPrice(row);
-        if (price === null) return;
+        var price = extractPriceFromContainer(row);
+        if (!price) return;
 
-        // Choose the injection cell in priority order.
-        // The roomtype cell (.hprt-table-cell-roomtype) is explicitly excluded
-        // because it spans multiple rows and is the description column, not an offer column.
-        const target =
+        var target =
           row.querySelector('.hprt-table-cell-conditions') ||
           row.querySelector('[class*="hprt-conditions"]')  ||
           row.querySelector('.hprt-price')                 ||
@@ -595,67 +566,61 @@
         if (target.classList.contains('hprt-table-cell-roomtype')) return;
         if (target.querySelector('.bpt-track-btn')) return;
 
-        const pkg  = buildPackage(row, currentRoomName);
-        const wrap = document.createElement('div');
+        var pkg  = buildPackage(row, currentRoomName);
+        var wrap = document.createElement('div');
         wrap.style.cssText = 'margin-top:8px;display:block;line-height:normal;';
         wrap.appendChild(makeButton(pkg, price));
         target.appendChild(wrap);
         injected++;
       });
 
-      console.log('[Booking Tracker] Classic table — injected:', injected);
+      console.log('[BPT] Classic table — injected:', injected);
     }
 
     // ── Strategy 2: Modern React offer blocks ────────────────────────────────
-    // Each [data-testid="rt-offer-block"] is one bookable package inside a room type.
-    // Room name lives in the parent room-type block, not in the offer block itself.
-
     if (injected === 0) {
-      const offerBlocks = document.querySelectorAll(
+      var offerBlocks = document.querySelectorAll(
         '[data-testid="rt-offer-block"], [data-testid="offer-list-item"], ' +
         '[data-testid="offer-block"], .hprt-roomtype-offer'
       );
 
-      console.log('[Booking Tracker] React offer blocks found:', offerBlocks.length);
+      console.log('[BPT] React offer blocks found:', offerBlocks.length);
 
       offerBlocks.forEach(function (offer) {
         if (offer.querySelector('.bpt-track-btn')) return;
 
-        // Room name is in the parent room-type block, not inside the offer block
-        const roomBlock = offer.closest(
+        var roomBlock = offer.closest(
           '[data-testid="rt-roomtype-block"], [data-testid="hprt-roomtype-block"], ' +
           '[data-testid="room-type-block"], [data-testid="roomtype-block"]'
         );
-        const nameEl = roomBlock && roomBlock.querySelector(
+        var nameEl = roomBlock && roomBlock.querySelector(
           '[data-testid="roomtype-name"], [data-testid="room-type-name"], ' +
           '[data-testid="rt-roomtype-name"], [data-testid="room-name"], .hprt-roomtype-link'
         );
-        const roomName = nameEl ? cleanText(nameEl) : 'חדר';
+        var roomName = nameEl ? cleanText(nameEl) : 'חדר';
 
-        const price = extractPrice(offer);
+        var price = extractPriceFromContainer(offer);
+        console.log('[BPT] Offer price found:', price, '| room:', roomName);
 
-        const pkg         = buildPackage(offer, roomName);
-        const submitBtn   = offer.querySelector('[data-testid="submit-button"], button[data-testid]');
-        const anchor      = submitBtn ? (submitBtn.parentElement || offer) : offer;
+        var pkg       = buildPackage(offer, roomName);
+        var submitBtn = offer.querySelector('[data-testid="submit-button"], button[data-testid]');
+        var anchor    = submitBtn ? (submitBtn.parentElement || offer) : offer;
 
         if (anchor.querySelector('.bpt-track-btn')) return;
 
-        const wrap = document.createElement('div');
+        var wrap = document.createElement('div');
         wrap.style.cssText = 'margin-top:8px;display:block;line-height:normal;';
         wrap.appendChild(makeButton(pkg, price));
         anchor.appendChild(wrap);
         injected++;
       });
 
-      console.log('[Booking Tracker] React blocks — injected:', injected);
+      console.log('[BPT] React blocks — injected:', injected);
     }
 
     // ── Strategy 3: CTA-button scan (last-resort fallback) ───────────────────
-    // Walk from each CTA button up to the nearest ancestor that has a price.
-    // Inject next to the CTA button; explicitly skip .hprt-table-cell-roomtype.
-
     if (injected === 0) {
-      console.log('[Booking Tracker] CTA fallback scan...');
+      console.log('[BPT] CTA fallback scan...');
 
       Array.from(document.querySelectorAll(CTA_SELS))
         .filter(function (btn) {
@@ -664,45 +629,43 @@
         .forEach(function (ctaBtn) {
           ctaBtn.setAttribute('data-bpt-done', '1');
 
-          // Walk up to find an ancestor that contains a price element
-          let container = null;
-          let price     = null;
-          let el        = ctaBtn.parentElement;
-          for (let i = 0; i < 12 && el; i++) {
-            const p = extractPrice(el);
+          var container = null;
+          var price     = null;
+          var el        = ctaBtn.parentElement;
+          for (var i = 0; i < 12 && el; i++) {
+            var p = extractPriceFromContainer(el);
             if (p) { container = el; price = p; break; }
             el = el.parentElement;
           }
-          if (!container) return;
+          if (!container || !price) return;
 
-          // Anchor: the <td> or direct parent of the CTA button
-          const anchor = ctaBtn.tagName === 'TD'
+          var anchor = ctaBtn.tagName === 'TD'
             ? ctaBtn
             : (ctaBtn.closest('td') || ctaBtn.parentElement);
 
           if (!anchor) return;
-          if (anchor.classList.contains('hprt-table-cell-roomtype')) return; // explicit exclusion
+          if (anchor.classList.contains('hprt-table-cell-roomtype')) return;
           if (anchor.querySelector('.bpt-track-btn')) return;
 
-          const roomName = findRoomName(container) || 'חדר';
-          const pkg      = buildPackage(container, roomName);
-          const wrap     = document.createElement('div');
+          var roomName = findRoomName(container) || 'חדר';
+          var pkg      = buildPackage(container, roomName);
+          var wrap     = document.createElement('div');
           wrap.style.cssText = 'margin-top:8px;display:block;line-height:normal;';
           wrap.appendChild(makeButton(pkg, price));
           anchor.appendChild(wrap);
           injected++;
         });
 
-      console.log('[Booking Tracker] CTA fallback — injected:', injected);
+      console.log('[BPT] CTA fallback — injected:', injected);
     }
 
-    console.log('[Booking Tracker] Total injected:', injected);
+    console.log('[BPT] Total injected:', injected);
   }
 
   // ── Button factory ───────────────────────────────────────────────────────────
 
   function makeButton(roomPackage, currentPrice) {
-    const btn = document.createElement('button');
+    var btn = document.createElement('button');
     btn.className = 'bpt-track-btn';
     btn.setAttribute('type', 'button');
     btn.textContent = 'מעקב מחיר 🔔';
@@ -717,10 +680,10 @@
 
   // ── Modal ────────────────────────────────────────────────────────────────────
 
-  var _bptSaveHandler = null; // capture-phase handler for the currently-open modal
+  var _bptSaveHandler = null;
 
   function closeModal() {
-    const el = document.getElementById('bpt-backdrop');
+    var el = document.getElementById('bpt-backdrop');
     if (el) el.remove();
     if (_bptSaveHandler) {
       document.removeEventListener('click', _bptSaveHandler, true);
@@ -728,26 +691,26 @@
     }
   }
 
-  const EMAIL_STORAGE_KEY  = 'bpt_email';
-  const TG_ID_STORAGE_KEY  = 'bpt_tg_id';
+  var EMAIL_STORAGE_KEY = 'bpt_email';
+  var TG_ID_STORAGE_KEY = 'bpt_tg_id';
 
   function showModal(roomPackage, currentPrice) {
     closeModal();
 
-    const priceLabel = currentPrice !== null
+    var priceLabel = (currentPrice !== null && currentPrice > 0)
       ? '₪' + currentPrice.toLocaleString('he-IL')
       : 'מחיר לא זוהה';
 
-    const savedEmail  = localStorage.getItem(EMAIL_STORAGE_KEY) || '';
-    const savedTgId   = localStorage.getItem(TG_ID_STORAGE_KEY) || '';
+    var savedEmail = localStorage.getItem(EMAIL_STORAGE_KEY) || '';
+    var savedTgId  = localStorage.getItem(TG_ID_STORAGE_KEY) || '';
 
-    const backdrop = document.createElement('div');
+    var backdrop = document.createElement('div');
     backdrop.id = 'bpt-backdrop';
     backdrop.addEventListener('click', function (e) {
       if (e.target === backdrop) closeModal();
     });
 
-    const modal = document.createElement('div');
+    var modal = document.createElement('div');
     modal.id = 'bpt-modal';
     modal.setAttribute('role', 'dialog');
     modal.setAttribute('aria-modal', 'true');
@@ -814,7 +777,6 @@
 
     modal.querySelector('.bpt-x').addEventListener('click', closeModal);
 
-    // Toggle email/telegram sections on checkbox change
     modal.querySelector('#bpt-ch-email').addEventListener('change', function () {
       modal.querySelector('#bpt-email-wrap').classList.toggle('bpt-hidden', !this.checked);
       if (this.checked) setTimeout(function () { modal.querySelector('#bpt-email-input').focus(); }, 50);
@@ -824,38 +786,32 @@
       if (this.checked) setTimeout(function () { modal.querySelector('#bpt-tg-id-input').focus(); }, 50);
     });
     modal.querySelector('#bpt-tg-help-btn').addEventListener('click', function () {
-      var txt = modal.querySelector('#bpt-tg-help-text');
-      txt.classList.toggle('bpt-hidden');
+      modal.querySelector('#bpt-tg-help-text').classList.toggle('bpt-hidden');
     });
 
-    // ── Slider: live price label + track-fill ────────────────────────────────
     var sliderEl  = modal.querySelector('#bpt-slider');
     var displayEl = modal.querySelector('#bpt-target-display');
 
     function updateSliderDisplay() {
       var pct     = parseInt(sliderEl.value, 10);
-      // Map value 1–99 to fill 0%–100% so the blue always grows left→right
       var fillPct = ((pct - 1) / 98) * 100;
       sliderEl.style.background =
         'linear-gradient(to right, #003580 ' + fillPct + '%, #c2cfe0 ' + fillPct + '%)';
-      if (currentPrice !== null) {
+      if (currentPrice) {
         var target    = Math.max(1, Math.round(currentPrice * (1 - pct / 100)));
         var formatted = target.toLocaleString('he-IL');
-        displayEl.textContent =
-          'התראה תשלח כשהמחיר ירד מתחת ל- ₪' + formatted + ' (' + pct + '% הנחה)';
+        displayEl.textContent = 'התראה תשלח כשהמחיר ירד מתחת ל- ₪' + formatted + ' (' + pct + '% הנחה)';
       } else {
         displayEl.textContent = 'הנחה של ' + pct + '% (מחיר לא זוהה)';
       }
     }
     sliderEl.addEventListener('input', updateSliderDisplay);
-    updateSliderDisplay(); // initialize label on open
+    updateSliderDisplay();
 
-    // Use a capture-phase listener on document so Booking.com's own capture
-    // handlers cannot swallow the click before we see it.
     function onDocClick(e) {
       var btn = e.target.closest('#bpt-submit-btn');
-      if (!btn) return;                        // click was not on the submit button
-      if (!document.getElementById('bpt-backdrop')) return; // modal not open
+      if (!btn) return;
+      if (!document.getElementById('bpt-backdrop')) return;
 
       e.stopImmediatePropagation();
       e.preventDefault();
@@ -872,7 +828,6 @@
       var email          = (emailChecked && emailInput) ? emailInput.value.trim() : null;
       var telegramChatId = (tgChecked && tgIdInput)    ? tgIdInput.value.trim()  : null;
 
-      // Validation
       if (!emailChecked && !tgChecked) {
         showErr(modal, 'נא לבחור לפחות אמצעי התראה אחד.');
         return;
@@ -897,7 +852,6 @@
         return;
       }
 
-      // Persist preferences
       if (emailChecked && saveEmailCb) {
         if (saveEmailCb.checked) localStorage.setItem(EMAIL_STORAGE_KEY, email);
         else localStorage.removeItem(EMAIL_STORAGE_KEY);
@@ -907,7 +861,6 @@
         else localStorage.removeItem(TG_ID_STORAGE_KEY);
       }
 
-      // Read slider value and compute targetPrice
       var sliderInput = modal.querySelector('#bpt-slider');
       var pct         = sliderInput ? parseInt(sliderInput.value, 10) : 10;
       var target      = Math.max(1, Math.round(currentPrice * (1 - pct / 100)));
@@ -916,7 +869,7 @@
       submitTracking(modal, roomPackage, target, currentPrice, email, tgChecked, telegramChatId);
     }
     _bptSaveHandler = onDocClick;
-    document.addEventListener('click', onDocClick, true); // capture phase
+    document.addEventListener('click', onDocClick, true);
 
     function onKey(e) {
       if (e.key === 'Escape') { closeModal(); document.removeEventListener('keydown', onKey); }
@@ -928,7 +881,7 @@
   }
 
   function showErr(modal, msg) {
-    let el = modal.querySelector('.bpt-err');
+    var el = modal.querySelector('.bpt-err');
     if (!el) {
       el = document.createElement('p');
       el.className = 'bpt-err';
@@ -941,51 +894,50 @@
     if (submitBtn) submitBtn.disabled = false;
   }
 
+  // ── Submit to backend ────────────────────────────────────────────────────────
+
   async function submitTracking(modal, roomPackage, targetPrice, originalPrice, email, telegram, telegramChatId) {
     try {
-      const meta = scrapePageMeta();
-      const response = await fetch(BACKEND_URL + '/api/track', {
+      // Scrape dates from URL params and hotel name from DOM at submit time
+      var meta = scrapePageMeta();
+
+      var payload = {
+        url:            window.location.href,
+        roomPackage:    roomPackage,
+        targetPrice:    targetPrice,
+        originalPrice:  originalPrice  || null,
+        hotelName:      meta.hotelName || null,
+        checkIn:        meta.checkIn   || null,
+        checkOut:       meta.checkOut  || null,
+        email:          email          || null,
+        telegram:       telegram       || false,
+        telegramChatId: telegramChatId || null,
+      };
+
+      console.log('[BPT] Submitting payload:', JSON.stringify(payload));
+
+      var response = await fetch(BACKEND_URL + '/api/track', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          url:            window.location.href,
-          roomPackage:    roomPackage,
-          targetPrice:    targetPrice,
-          originalPrice:  originalPrice     || null,
-          hotelName:      meta.hotelName    || null,
-          checkIn:        meta.checkIn      || null,
-          checkOut:       meta.checkOut     || null,
-          email:          email             || null,
-          telegram:       telegram          || false,
-          telegramChatId: telegramChatId    || null,
-        }),
+        body:    JSON.stringify(payload),
       });
 
-      const text = await response.text();
-      console.log('[Booking Tracker] Raw response (' + response.status + '):', text.substring(0, 300));
+      var text = await response.text();
+      console.log('[BPT] Response (' + response.status + '):', text.substring(0, 300));
 
       if (!response.ok) {
         var msg = 'שגיאת שרת ' + response.status;
         try {
-          const data = JSON.parse(text);
+          var data = JSON.parse(text);
           if (data.error) msg = data.error;
-        } catch (e) {
-          console.error('[Booking Tracker] Server sent HTML instead of JSON:', text.substring(0, 200));
-        }
+        } catch (e) {}
         throw new Error(msg);
-      }
-
-      try {
-        JSON.parse(text); // validate the success response is also valid JSON
-      } catch (e) {
-        console.error('[Booking Tracker] Success response is not JSON:', text.substring(0, 200));
-        throw new Error('תגובה לא תקינה מהשרת');
       }
 
       showSuccess(modal, targetPrice);
 
     } catch (err) {
-      console.error('[Booking Tracker] submitTracking failed — name:', err.name, '| message:', err.message, '| full error:', err);
+      console.error('[BPT] submitTracking error:', err.message);
       showErr(modal, err.message || 'לא ניתן להתחבר לשרת.');
     }
   }
@@ -1010,9 +962,9 @@
   // ── MutationObserver ─────────────────────────────────────────────────────────
 
   function startObserver() {
-    let timer = null;
-    const observer = new MutationObserver(function (mutations) {
-      const external = mutations.some(function (m) {
+    var timer = null;
+    var observer = new MutationObserver(function (mutations) {
+      var external = mutations.some(function (m) {
         return Array.from(m.addedNodes).some(function (n) {
           return n.nodeType === Node.ELEMENT_NODE &&
                  n.id !== 'bpt-backdrop' &&

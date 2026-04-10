@@ -52,22 +52,23 @@ app.post('/api/track', async (req, res) => {
 
   try {
     const filter = { url, roomPackage: roomPackage.trim() };
+    const parsedOriginal = (originalPrice != null && !isNaN(parseFloat(originalPrice)))
+      ? parseFloat(originalPrice)
+      : null;
+
     const update = {
       $set: {
         targetPrice:    price,
         email:          email          || null,
         telegram:       telegram === true,
         telegramChatId: telegramChatId || null,
+        // Always overwrite so re-submissions fix previously-null fields
+        ...(parsedOriginal            && { originalPrice: parsedOriginal }),
+        ...(hotelName                 && { hotelName }),
+        ...(checkIn                   && { checkIn }),
+        ...(checkOut                  && { checkOut }),
       },
-      $setOnInsert: {
-        alertCount:    0,
-        originalPrice: (originalPrice != null && !isNaN(parseFloat(originalPrice)))
-          ? parseFloat(originalPrice)
-          : null,
-        hotelName: hotelName || null,
-        checkIn:   checkIn   || null,
-        checkOut:  checkOut  || null,
-      },
+      $setOnInsert: { alertCount: 0 },
     };
     const doc = await TrackingRequest.findOneAndUpdate(filter, update, {
       new:    true,
