@@ -4,15 +4,24 @@ require('dotenv').config();
 
 const express          = require('express');
 const cors             = require('cors');
+const basicAuth        = require('express-basic-auth');
 const mongoose         = require('mongoose');
 const cron             = require('node-cron');
 const { runScrapeJob }   = require('./scraper');
 const TrackingRequest    = require('./models/TrackingRequest');
 const { renderAdminPage } = require('./adminPage');
 
-const app          = express();
-const PORT         = process.env.PORT || 3001;
-const ADMIN_SECRET = process.env.ADMIN_SECRET || 'bpt-admin-2024';
+const app  = express();
+const PORT = process.env.PORT || 3001;
+
+// ── Basic Auth middleware ─────────────────────────────────────────────────────
+const adminAuth = basicAuth({
+  users: {
+    [process.env.ADMIN_USERNAME || 'admin']: process.env.ADMIN_PASSWORD || 'changeme',
+  },
+  challenge: true,          // sends WWW-Authenticate header → browser shows login dialog
+  realm: 'Booking Price Tracker Admin',
+});
 
 // ── CORS — must be first middleware ──────────────────────────────────────────
 app.use(cors({ origin: '*' }));
@@ -94,8 +103,8 @@ app.post('/api/track', async (req, res) => {
   }
 });
 
-// ── GET /api/track — list all tracked packages ────────────────────────────────
-app.get('/api/track', async (_req, res) => {
+// ── GET /api/track — list all tracked packages (admin only) ──────────────────
+app.get('/api/track', adminAuth, async (_req, res) => {
   try {
     const hotels = await TrackingRequest.find().sort({ addedAt: -1 }).lean();
     res.json({ count: hotels.length, hotels });
@@ -104,8 +113,8 @@ app.get('/api/track', async (_req, res) => {
   }
 });
 
-// ── DELETE /api/track/:id — stop tracking ─────────────────────────────────────
-app.delete('/api/track/:id', async (req, res) => {
+// ── DELETE /api/track/:id — stop tracking (admin only) ───────────────────────
+app.delete('/api/track/:id', adminAuth, async (req, res) => {
   try {
     const doc = await TrackingRequest.findByIdAndDelete(req.params.id);
     if (!doc) return res.status(404).json({ error: `No entry found with id '${req.params.id}'.` });
@@ -116,23 +125,14 @@ app.delete('/api/track/:id', async (req, res) => {
   }
 });
 
-// ── POST /api/scrape — manually trigger a scrape ──────────────────────────────
-app.post('/api/scrape', (_req, res) => {
+// ── POST /api/scrape — manually trigger a scrape (admin only) ────────────────
+app.post('/api/scrape', adminAuth, (_req, res) => {
   res.json({ message: 'Scrape job triggered. Check server logs.' });
   runScrapeJob().catch((err) => console.error('[Scraper] Manual run failed:', err.message));
 });
 
-// ── GET /admin — password-protected dashboard ─────────────────────────────────
-app.get('/admin', async (req, res) => {
-  if (req.query.secret !== ADMIN_SECRET) {
-    return res.status(401).send(
-      '<!DOCTYPE html><html><head><title>401</title></head>' +
-      '<body style="font-family:sans-serif;text-align:center;padding:4rem;background:#0f172a;color:#94a3b8;">' +
-      '<h1 style="color:#ef4444;font-size:3rem;">401</h1>' +
-      '<p>Unauthorized — add <code>?secret=...</code> to the URL.</p>' +
-      '</body></html>'
-    );
-  }
+// ── GET /admin — Basic-Auth-protected dashboard ───────────────────────────────
+app.get('/admin', adminAuth, async (_req, res) => {
   try {
     const rows = await TrackingRequest.find().sort({ addedAt: -1 }).lean();
     res.send(renderAdminPage(rows));
@@ -159,12 +159,14 @@ cron.schedule('0 */2 * * *', () => {
 // ── Start ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\nBooking Price Tracker — port ${PORT}`);
-  console.log(`  POST   /api/track     — Add/update tracking`);
-  console.log(`  GET    /api/track     — List all entries`);
-  console.log(`  DELETE /api/track/:id — Stop tracking`);
-  console.log(`  POST   /api/scrape    — Manual scrape`);
-  console.log(`  GET    /health        — Health check`);
-  console.log(`\nEmail   : ${process.env.EMAIL_USER        ? '✓ ' + process.env.EMAIL_USER : '✗ not set'}`);
-  console.log(`Telegram: ${process.env.TELEGRAM_BOT_TOKEN ? '✓ configured'               : '✗ not set'}`);
-  console.log(`MongoDB : ${MONGODB_URI                    ? '✓ URI present'              : '✗ MONGODB_URI not set'}\n`);
+  console.log(`  POST   /api/track     — Add/update tracking (public)`);
+  console.log(`  GET    /api/track     — List all entries    (admin)`);
+  console.log(`  DELETE /api/track/:id — Stop tracking       (admin)`);
+  console.log(`  POST   /api/scrape    — Manual scrape       (admin)`);
+  console.log(`  GET    /admin         — Dashboard           (admin)`);
+  console.log(`  GET    /health        — Health check        (public)`);
+  console.log(`\nAdmin   : ${process.env.ADMIN_USERNAME     ? '✓ ' + process.env.ADMIN_USERNAME : '✗ using default (set ADMIN_USERNAME)'}`);
+  console.log(`Email   : ${process.env.EMAIL_USER          ? '✓ ' + process.env.EMAIL_USER     : '✗ not set'}`);
+  console.log(`Telegram: ${process.env.TELEGRAM_BOT_TOKEN  ? '✓ configured'                   : '✗ not set'}`);
+  console.log(`MongoDB : ${MONGODB_URI                     ? '✓ URI present'                  : '✗ MONGODB_URI not set'}\n`);
 });
