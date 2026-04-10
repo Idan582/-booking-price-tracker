@@ -613,7 +613,7 @@
         var pkg  = buildPackage(row, currentRoomName);
         var wrap = document.createElement('div');
         wrap.style.cssText = 'margin-top:8px;display:block;line-height:normal;';
-        wrap.appendChild(makeButton(pkg, price));
+        wrap.appendChild(makeButton(pkg, price, currentRoomName));
         target.appendChild(wrap);
         injected++;
       });
@@ -654,7 +654,7 @@
 
         var wrap = document.createElement('div');
         wrap.style.cssText = 'margin-top:8px;display:block;line-height:normal;';
-        wrap.appendChild(makeButton(pkg, price));
+        wrap.appendChild(makeButton(pkg, price, roomName));
         anchor.appendChild(wrap);
         injected++;
       });
@@ -695,7 +695,7 @@
           var pkg      = buildPackage(container, roomName);
           var wrap     = document.createElement('div');
           wrap.style.cssText = 'margin-top:8px;display:block;line-height:normal;';
-          wrap.appendChild(makeButton(pkg, price));
+          wrap.appendChild(makeButton(pkg, price, roomName));
           anchor.appendChild(wrap);
           injected++;
         });
@@ -708,7 +708,7 @@
 
   // ── Button factory ───────────────────────────────────────────────────────────
 
-  function makeButton(roomPackage, currentPrice) {
+  function makeButton(roomPackage, currentPrice, roomType) {
     var btn = document.createElement('button');
     btn.className = 'bpt-track-btn';
     btn.setAttribute('type', 'button');
@@ -717,7 +717,7 @@
     btn.addEventListener('click', function (e) {
       e.stopPropagation();
       e.preventDefault();
-      showModal(roomPackage, currentPrice);
+      showModal(roomPackage, currentPrice, roomType || null);
     });
     return btn;
   }
@@ -738,7 +738,7 @@
   var EMAIL_STORAGE_KEY = 'bpt_email';
   var TG_ID_STORAGE_KEY = 'bpt_tg_id';
 
-  function showModal(roomPackage, currentPrice) {
+  function showModal(roomPackage, currentPrice, roomType) {
     closeModal();
 
     var priceLabel = (currentPrice !== null && currentPrice > 0)
@@ -910,7 +910,7 @@
       var target      = Math.max(1, Math.round(currentPrice * (1 - pct / 100)));
 
       btn.disabled = true;
-      submitTracking(modal, roomPackage, target, currentPrice, email, tgChecked, telegramChatId);
+      submitTracking(modal, roomPackage, target, currentPrice, email, tgChecked, telegramChatId, roomType);
     }
     _bptSaveHandler = onDocClick;
     document.addEventListener('click', onDocClick, true);
@@ -940,14 +940,19 @@
 
   // ── Submit to backend ────────────────────────────────────────────────────────
 
-  async function submitTracking(modal, roomPackage, targetPrice, originalPrice, email, telegram, telegramChatId) {
+  async function submitTracking(modal, roomPackage, targetPrice, originalPrice, email, telegram, telegramChatId, roomType) {
     try {
       // Scrape dates from URL params and hotel name from DOM at submit time
       var meta = scrapePageMeta();
 
+      // Append #availability_target so "Open" link jumps straight to the rooms table
+      var baseUrl = window.location.href.split('#')[0];
+      var trackUrl = baseUrl + '#availability_target';
+
       var payload = {
-        url:            window.location.href,
+        url:            trackUrl,
         roomPackage:    roomPackage,
+        roomType:       roomType       || null,
         targetPrice:    targetPrice,
         originalPrice:  originalPrice  || null,
         hotelName:      meta.hotelName || null,

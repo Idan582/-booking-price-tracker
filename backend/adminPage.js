@@ -61,8 +61,11 @@ function renderRow(row) {
   const stayParts = [];
   if (guestsVal != null) stayParts.push(`${guestsVal} אורחים`);
   if (roomsVal  != null) stayParts.push(`${roomsVal} חדרים`);
-  const stayCell = stayParts.length > 0
-    ? `<div class="text-xs text-slate-300" dir="rtl">${stayParts.join(' | ')}</div>`
+  const roomTypeText = row.roomType
+    ? `<div class="text-xs text-slate-400 mt-1" dir="rtl">${escHtml(row.roomType)}</div>`
+    : '';
+  const stayCell = (stayParts.length > 0 || roomTypeText)
+    ? `<div class="text-xs text-slate-300" dir="rtl">${stayParts.join(' | ')}</div>${roomTypeText}`
     : `<span class="text-slate-500 italic text-xs">N/A</span>`;
 
   const id = escHtml(String(row._id));

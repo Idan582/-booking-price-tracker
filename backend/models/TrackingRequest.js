@@ -31,6 +31,7 @@ const trackingSchema = new mongoose.Schema(
   {
     url:            { type: String, required: true },
     roomPackage:    { type: String, required: true },
+    roomType:       { type: String, default: null },
     targetPrice:    { type: Number, required: true },
     email:          { type: String,  default: null },
     telegram:       { type: Boolean, default: false },
