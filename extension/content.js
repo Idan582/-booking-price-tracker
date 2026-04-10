@@ -437,24 +437,42 @@
     checkIn  = checkIn  ? checkIn.trim()  || null : null;
     checkOut = checkOut ? checkOut.trim() || null : null;
 
-    // ── Hotel name: try DOM selectors, fall back to page title ─────────────────
-    var hotelNameEl = document.querySelector(
-      '[data-testid="header-hotel-name"], ' +
-      '[data-testid="property-header-name"], ' +
-      'h2.pp-header__title, ' +
-      '.hp__hotel-name, ' +
-      '#hp_hotel_name, ' +
-      'h1[class*="hotelName"], ' +
-      'h1[class*="hotel-name"], ' +
-      '[itemprop="name"], ' +
-      '.bui-property-name__name'
-    );
-    var hotelName = hotelNameEl ? cleanText(hotelNameEl) : null;
+    // ── Hotel name: try selectors in priority order, then h1, then page title ──
+    var hotelName = null;
 
+    // 1. Most specific selectors
+    var specificSelectors = [
+      'h2.pp-header__title',
+      '[data-testid="header-hotel-name"]',
+      '[data-testid="property-header-name"]',
+      '.hp__hotel-name',
+      '#hp_hotel_name',
+      '[itemprop="name"]',
+      '.bui-property-name__name',
+    ];
+    for (var si = 0; si < specificSelectors.length; si++) {
+      var el = document.querySelector(specificSelectors[si]);
+      if (el) {
+        var t = cleanText(el);
+        if (t) { hotelName = t; break; }
+      }
+    }
+
+    // 2. Any h1 on the page
     if (!hotelName) {
-      // Page title format: "Hotel Name - Booking.com" or "Hotel Name | Booking.com"
+      var h1 = document.querySelector('h1');
+      if (h1) hotelName = cleanText(h1) || null;
+    }
+
+    // 3. Page title — "Hotel Name - Booking.com" or "Hotel Name | Booking.com"
+    if (!hotelName) {
       var titleMatch = document.title.match(/^(.+?)(?:\s*[-–|]\s*(?:Booking\.com|בוקינג\.קום))/i);
       if (titleMatch) hotelName = titleMatch[1].trim() || null;
+    }
+
+    // 4. Raw title as absolute last resort
+    if (!hotelName && document.title) {
+      hotelName = document.title.trim() || null;
     }
 
     console.log('[BPT] meta — checkIn:', checkIn, '| checkOut:', checkOut, '| hotel:', hotelName);
