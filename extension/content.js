@@ -377,6 +377,61 @@
       .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  // ── Page-level metadata (hotel name + dates) ─────────────────────────────────
+
+  function scrapePageMeta() {
+    // ── Hotel name ─────────────────────────────────────────────────────────────
+    const hotelNameEl = document.querySelector(
+      '[data-testid="header-hotel-name"], ' +
+      '[data-testid="property-header-name"], ' +
+      'h2.pp-header__title, ' +
+      '.hp__hotel-name, ' +
+      '#hp_hotel_name, ' +
+      'h1[class*="hotelName"], ' +
+      'h1[class*="hotel-name"], ' +
+      '[itemprop="name"], ' +
+      '.bui-property-name__name'
+    );
+    let hotelName = hotelNameEl ? cleanText(hotelNameEl) : null;
+    if (!hotelName) {
+      // Fallback: page title is usually "Hotel Name - Booking.com"
+      const m = document.title.match(/^(.+?)(?:\s*[-–]\s*(?:Booking\.com|בוקינג\.קום))?$/i);
+      if (m) hotelName = m[1].trim() || null;
+    }
+
+    // ── Dates — URL params first, then DOM ─────────────────────────────────────
+    const params   = new URLSearchParams(window.location.search);
+    let checkIn    = params.get('checkin')  || params.get('check_in')  || null;
+    let checkOut   = params.get('checkout') || params.get('check_out') || null;
+
+    if (!checkIn || !checkOut) {
+      // Try the search-box date fields visible on the hotel page
+      const ciEl = document.querySelector(
+        '[data-testid="date-display-field-start"], ' +
+        '[data-testid="checkin-textbox"], ' +
+        'input[name="checkin"], ' +
+        '[data-testid="search-field-checkin-label"], ' +
+        '.sb-date-field__display:first-of-type'
+      );
+      const coEl = document.querySelector(
+        '[data-testid="date-display-field-end"], ' +
+        '[data-testid="checkout-textbox"], ' +
+        'input[name="checkout"], ' +
+        '[data-testid="search-field-checkout-label"], ' +
+        '.sb-date-field__display:last-of-type'
+      );
+      if (ciEl) checkIn  = checkIn  || (ciEl.value  || cleanText(ciEl))  || null;
+      if (coEl) checkOut = checkOut || (coEl.value || cleanText(coEl)) || null;
+    }
+
+    // Normalise: trim whitespace, convert empty strings to null
+    if (checkIn)  checkIn  = checkIn.trim()  || null;
+    if (checkOut) checkOut = checkOut.trim() || null;
+
+    console.log('[Booking Tracker] Meta — hotel:', hotelName, '| in:', checkIn, '| out:', checkOut);
+    return { hotelName, checkIn, checkOut };
+  }
+
   // ── Room name extraction ─────────────────────────────────────────────────────
   // Walk UP from a container, searching for a room-name element at each level.
 
@@ -452,17 +507,51 @@
     'a[data-testid*="reserve"]',
   ].join(',');
 
-  // Selectors for price elements — tried in priority order.
+  // Selectors for price elements — tried in priority order (updated for 2026 Booking.com).
   const PRICE_EL_SELS = [
     '[data-testid="price-and-discounted-price"]',
     '[data-testid="recommended-units-price"]',
     '[data-testid="price-for-x-nights"]',
+    '[data-testid="prco-wrapper"]',
+    '[data-testid="price_and_discounted_price"]',
+    '[data-testid="offer-price"]',
     '.hprt-price-price',
     '.bui-price-display__value',
     '[class*="finalPrice"]',
     '[class*="prco-inline"]',
     '[class*="price-value"]',
+    '[class*="Price__value"]',
+    '[class*="prco-text"]',
+    '[class*="priceText"]',
+    '[class*="discountedPrice"]',
   ];
+
+  // Fallback: text-walk an element tree looking for ₪NNN pattern.
+  function parsePriceFromText(container) {
+    if (!container) return null;
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+    let node;
+    while ((node = walker.nextNode())) {
+      const match = node.textContent.match(/(?:₪|ILS)\s*([\d,]+)/);
+      if (match) {
+        const num = parseInt(match[1].replace(/,/g, ''), 10);
+        if (num > 100) return num; // sanity: hotel prices are at least ₪100
+      }
+    }
+    return null;
+  }
+
+  // Try all PRICE_EL_SELS within a container, then fall back to text scan.
+  function extractPrice(container) {
+    for (const sel of PRICE_EL_SELS) {
+      const el = container.querySelector(sel);
+      if (el) {
+        const p = parsePrice(el);
+        if (p) return p;
+      }
+    }
+    return parsePriceFromText(container);
+  }
 
   function injectButtons() {
     console.log('[Booking Tracker] Scanning for rooms...');
@@ -489,11 +578,7 @@
         if (!currentRoomName) return;
 
         // Offer rows always have a price — skip rows that don't
-        let price = null;
-        for (const sel of PRICE_EL_SELS) {
-          const priceEl = row.querySelector(sel);
-          if (priceEl) { price = parsePrice(priceEl); break; }
-        }
+        const price = extractPrice(row);
         if (price === null) return;
 
         // Choose the injection cell in priority order.
@@ -547,11 +632,7 @@
         );
         const roomName = nameEl ? cleanText(nameEl) : 'חדר';
 
-        let price = null;
-        for (const sel of PRICE_EL_SELS) {
-          const priceEl = offer.querySelector(sel);
-          if (priceEl) { price = parsePrice(priceEl); break; }
-        }
+        const price = extractPrice(offer);
 
         const pkg         = buildPackage(offer, roomName);
         const submitBtn   = offer.querySelector('[data-testid="submit-button"], button[data-testid]');
@@ -588,11 +669,8 @@
           let price     = null;
           let el        = ctaBtn.parentElement;
           for (let i = 0; i < 12 && el; i++) {
-            for (const sel of PRICE_EL_SELS) {
-              const priceEl = el.querySelector(sel);
-              if (priceEl) { container = el; price = parsePrice(priceEl); break; }
-            }
-            if (container) break;
+            const p = extractPrice(el);
+            if (p) { container = el; price = p; break; }
             el = el.parentElement;
           }
           if (!container) return;
@@ -865,6 +943,7 @@
 
   async function submitTracking(modal, roomPackage, targetPrice, originalPrice, email, telegram, telegramChatId) {
     try {
+      const meta = scrapePageMeta();
       const response = await fetch(BACKEND_URL + '/api/track', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -872,10 +951,13 @@
           url:            window.location.href,
           roomPackage:    roomPackage,
           targetPrice:    targetPrice,
-          originalPrice:  originalPrice  || null,
-          email:          email          || null,
-          telegram:       telegram       || false,
-          telegramChatId: telegramChatId || null,
+          originalPrice:  originalPrice     || null,
+          hotelName:      meta.hotelName    || null,
+          checkIn:        meta.checkIn      || null,
+          checkOut:       meta.checkOut     || null,
+          email:          email             || null,
+          telegram:       telegram          || false,
+          telegramChatId: telegramChatId    || null,
         }),
       });
 
