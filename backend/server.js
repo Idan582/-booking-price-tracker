@@ -6,11 +6,13 @@ const express          = require('express');
 const cors             = require('cors');
 const mongoose         = require('mongoose');
 const cron             = require('node-cron');
-const { runScrapeJob } = require('./scraper');
-const TrackingRequest  = require('./models/TrackingRequest');
+const { runScrapeJob }   = require('./scraper');
+const TrackingRequest    = require('./models/TrackingRequest');
+const { renderAdminPage } = require('./adminPage');
 
-const app  = express();
-const PORT = process.env.PORT || 3001;
+const app          = express();
+const PORT         = process.env.PORT || 3001;
+const ADMIN_SECRET = process.env.ADMIN_SECRET || 'bpt-admin-2024';
 
 // ── CORS — must be first middleware ──────────────────────────────────────────
 app.use(cors({ origin: '*' }));
@@ -35,7 +37,7 @@ function isValidBookingUrl(url) {
 
 // ── POST /api/track — add or update a tracked package ────────────────────────
 app.post('/api/track', async (req, res) => {
-  const { url, roomPackage, targetPrice, email, telegram, telegramChatId } = req.body;
+  const { url, roomPackage, targetPrice, originalPrice, email, telegram, telegramChatId } = req.body;
 
   if (!url || !roomPackage || targetPrice === undefined || targetPrice === null)
     return res.status(400).json({ error: "'url', 'roomPackage', and 'targetPrice' are required." });
@@ -57,7 +59,12 @@ app.post('/api/track', async (req, res) => {
         telegram:       telegram === true,
         telegramChatId: telegramChatId || null,
       },
-      $setOnInsert: { alertCount: 0 },
+      $setOnInsert: {
+        alertCount:    0,
+        originalPrice: (originalPrice != null && !isNaN(parseFloat(originalPrice)))
+          ? parseFloat(originalPrice)
+          : null,
+      },
     };
     const doc = await TrackingRequest.findOneAndUpdate(filter, update, {
       new:    true,
@@ -106,6 +113,25 @@ app.delete('/api/track/:id', async (req, res) => {
 app.post('/api/scrape', (_req, res) => {
   res.json({ message: 'Scrape job triggered. Check server logs.' });
   runScrapeJob().catch((err) => console.error('[Scraper] Manual run failed:', err.message));
+});
+
+// ── GET /admin — password-protected dashboard ─────────────────────────────────
+app.get('/admin', async (req, res) => {
+  if (req.query.secret !== ADMIN_SECRET) {
+    return res.status(401).send(
+      '<!DOCTYPE html><html><head><title>401</title></head>' +
+      '<body style="font-family:sans-serif;text-align:center;padding:4rem;background:#0f172a;color:#94a3b8;">' +
+      '<h1 style="color:#ef4444;font-size:3rem;">401</h1>' +
+      '<p>Unauthorized — add <code>?secret=...</code> to the URL.</p>' +
+      '</body></html>'
+    );
+  }
+  try {
+    const rows = await TrackingRequest.find().sort({ addedAt: -1 }).lean();
+    res.send(renderAdminPage(rows));
+  } catch (err) {
+    res.status(500).send(`<pre>${err.message}</pre>`);
+  }
 });
 
 // ── GET /health ───────────────────────────────────────────────────────────────

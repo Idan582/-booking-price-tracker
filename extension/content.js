@@ -835,7 +835,7 @@
       var target      = Math.max(1, Math.round(currentPrice * (1 - pct / 100)));
 
       btn.disabled = true;
-      submitTracking(modal, roomPackage, target, email, tgChecked, telegramChatId);
+      submitTracking(modal, roomPackage, target, currentPrice, email, tgChecked, telegramChatId);
     }
     _bptSaveHandler = onDocClick;
     document.addEventListener('click', onDocClick, true); // capture phase
@@ -863,7 +863,7 @@
     if (submitBtn) submitBtn.disabled = false;
   }
 
-  async function submitTracking(modal, roomPackage, targetPrice, email, telegram, telegramChatId) {
+  async function submitTracking(modal, roomPackage, targetPrice, originalPrice, email, telegram, telegramChatId) {
     try {
       const response = await fetch(BACKEND_URL + '/api/track', {
         method:  'POST',
@@ -872,6 +872,7 @@
           url:            window.location.href,
           roomPackage:    roomPackage,
           targetPrice:    targetPrice,
+          originalPrice:  originalPrice  || null,
           email:          email          || null,
           telegram:       telegram       || false,
           telegramChatId: telegramChatId || null,
