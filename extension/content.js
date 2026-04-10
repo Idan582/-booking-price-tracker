@@ -428,7 +428,7 @@
   // ── Page-level metadata (hotel name + dates from URL) ────────────────────────
 
   function scrapePageMeta() {
-    // ── Dates: URL params are the most reliable source ─────────────────────────
+    // ── Dates + guests + rooms: URL params are the most reliable source ──────────
     var params   = new URLSearchParams(window.location.search);
     var checkIn  = params.get('checkin')  || params.get('check_in')  || null;
     var checkOut = params.get('checkout') || params.get('check_out') || null;
@@ -436,6 +436,11 @@
     // Trim and nullify empty strings
     checkIn  = checkIn  ? checkIn.trim()  || null : null;
     checkOut = checkOut ? checkOut.trim() || null : null;
+
+    var adults   = parseInt(params.get('group_adults')   || '0', 10) || 0;
+    var children = parseInt(params.get('group_children') || '0', 10) || 0;
+    var guests   = (adults + children) > 0 ? (adults + children) : null;
+    var rooms    = parseInt(params.get('no_rooms') || '0', 10) || null;
 
     // ── Hotel name: 5-level fallback chain ────────────────────────────────────
     var hotelName = null;
@@ -496,8 +501,8 @@
       hotelName = document.title.trim() || null;
     }
 
-    console.log('[BPT] meta — hotel:', hotelName, '| checkIn:', checkIn, '| checkOut:', checkOut);
-    return { hotelName: hotelName || null, checkIn: checkIn || null, checkOut: checkOut || null };
+    console.log('[BPT] meta — hotel:', hotelName, '| checkIn:', checkIn, '| checkOut:', checkOut, '| guests:', guests, '| rooms:', rooms);
+    return { hotelName: hotelName || null, checkIn: checkIn || null, checkOut: checkOut || null, guests: guests, rooms: rooms };
   }
 
   // ── Room name extraction ─────────────────────────────────────────────────────
@@ -948,6 +953,8 @@
         hotelName:      meta.hotelName || null,
         checkIn:        meta.checkIn   || null,
         checkOut:       meta.checkOut  || null,
+        guests:         meta.guests    || null,
+        rooms:          meta.rooms     || null,
         email:          email          || null,
         telegram:       telegram       || false,
         telegramChatId: telegramChatId || null,

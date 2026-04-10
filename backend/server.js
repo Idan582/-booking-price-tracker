@@ -37,7 +37,7 @@ function isValidBookingUrl(url) {
 
 // ── POST /api/track — add or update a tracked package ────────────────────────
 app.post('/api/track', async (req, res) => {
-  const { url, roomPackage, targetPrice, originalPrice, hotelName, checkIn, checkOut, email, telegram, telegramChatId } = req.body;
+  const { url, roomPackage, targetPrice, originalPrice, hotelName, checkIn, checkOut, guests, rooms, email, telegram, telegramChatId } = req.body;
 
   if (!url || !roomPackage || targetPrice === undefined || targetPrice === null)
     return res.status(400).json({ error: "'url', 'roomPackage', and 'targetPrice' are required." });
@@ -67,6 +67,8 @@ app.post('/api/track', async (req, res) => {
         ...(hotelName                 && { hotelName }),
         ...(checkIn                   && { checkIn }),
         ...(checkOut                  && { checkOut }),
+        ...(guests != null && !isNaN(Number(guests)) && { guests: Number(guests) }),
+        ...(rooms  != null && !isNaN(Number(rooms))  && { rooms:  Number(rooms)  }),
       },
       $setOnInsert: { alertCount: 0 },
     };

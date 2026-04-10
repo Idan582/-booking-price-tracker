@@ -41,6 +41,7 @@ const trackingSchema = new mongoose.Schema(
     checkIn:        { type: String,  default: null },
     checkOut:       { type: String,  default: null },
     guests:         { type: Number,  default: null },
+    rooms:          { type: Number,  default: null },
     originalPrice:  { type: Number,  default: null },
     alertCount:     { type: Number,  default: 0 },
   },

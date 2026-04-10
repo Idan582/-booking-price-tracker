@@ -23,8 +23,8 @@ function fmtPrice(n) {
 }
 
 // Column order in HTML (left → right on screen):
-//   Actions | Hotel Link | Email | Telegram | Vacation | Target | Booking | Hotel Name | Date Added
-// With dir="rtl" the user reads right-to-left, so Date Added is the first thing they see.
+//   Email | Telegram | Vacation | Target | Booking | Hotel Name | Stay Details | Date Added | Hotel Link | Actions
+// With dir="rtl" the user reads right-to-left, so Date Added area is the first thing they see.
 function renderRow(row) {
   const hotelCell = row.hotelName
     ? `<div class="font-medium text-white text-sm">${escHtml(row.hotelName)}</div>`
@@ -56,6 +56,15 @@ function renderRow(row) {
     ? `<span class="text-blue-400 text-xs">${escHtml(row.email)}</span>`
     : `<span class="text-slate-500 italic text-xs">עדיין לא הוזן</span>`;
 
+  const guestsVal = row.guests != null ? row.guests : null;
+  const roomsVal  = row.rooms  != null ? row.rooms  : null;
+  const stayParts = [];
+  if (guestsVal != null) stayParts.push(`${guestsVal} אורח${guestsVal !== 1 ? 'ים' : ''}`);
+  if (roomsVal  != null) stayParts.push(`${roomsVal} חדר${roomsVal  !== 1 ? 'ים' : ''}`);
+  const stayCell = stayParts.length > 0
+    ? `<div class="text-xs text-slate-300">${stayParts.join(', ')}</div>`
+    : `<span class="text-slate-500 italic text-xs">N/A</span>`;
+
   const id = escHtml(String(row._id));
   const searchData = [row.hotelName, row.roomPackage, row.email, row.telegramChatId]
     .filter(Boolean).join(' ').toLowerCase();
@@ -69,6 +78,7 @@ function renderRow(row) {
       <td class="px-4 py-3 align-top pt-4">${targetCell}</td>
       <td class="px-4 py-3 align-top pt-4">${bookingPriceCell}</td>
       <td class="px-4 py-3 align-top pt-4">${hotelCell}${pkgCell}</td>
+      <td class="px-4 py-3 align-top pt-4">${stayCell}</td>
       <td class="px-4 py-3 text-xs text-slate-400 whitespace-nowrap align-top pt-4">${fmtDate(row.addedAt)}</td>
       <td class="px-4 py-3 align-top pt-4 text-center">
         <a href="${escHtml(row.url)}" target="_blank" rel="noopener noreferrer"
@@ -190,13 +200,14 @@ function renderAdminPage(rows) {
               <th class="px-4 py-3 text-left  whitespace-nowrap">Target Price + %</th>
               <th class="px-4 py-3 text-left  whitespace-nowrap">Booking Price</th>
               <th class="px-4 py-3 text-left  whitespace-nowrap">Hotel Name</th>
+              <th class="px-4 py-3 text-left  whitespace-nowrap">Stay Details</th>
               <th class="px-4 py-3 text-left  whitespace-nowrap">Date Added</th>
               <th class="px-4 py-3 text-center whitespace-nowrap">Hotel Link</th>
               <th class="px-4 py-3 text-center whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody id="table-body">
-            ${tableRows || '<tr><td colspan="9" class="px-4 py-20 text-center text-slate-500 text-sm">No tracking requests found.</td></tr>'}
+            ${tableRows || '<tr><td colspan="10" class="px-4 py-20 text-center text-slate-500 text-sm">No tracking requests found.</td></tr>'}
           </tbody>
         </table>
       </div>
