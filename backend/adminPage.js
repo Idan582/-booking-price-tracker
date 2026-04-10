@@ -62,17 +62,13 @@ function renderRow(row) {
   return `
     <tr id="row-${id}" data-search="${escHtml(searchData)}"
         class="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors group">
-      <!-- col 1 (leftmost on screen) -->
-      <td class="px-4 py-3 align-top pt-4 text-center">
-        <button onclick="deleteRow('${id}')"
-           class="inline-flex items-center gap-1.5 bg-red-500/10 hover:bg-red-500 active:bg-red-700 text-red-400 hover:text-white text-xs px-3 py-1.5 rounded-lg transition-all border border-red-500/30 hover:border-transparent font-medium whitespace-nowrap">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-          </svg>
-          Delete
-        </button>
-      </td>
-      <!-- col 2 -->
+      <td class="px-4 py-3 align-top pt-4">${emailCell}</td>
+      <td class="px-4 py-3 align-top pt-4">${tgCell}</td>
+      <td class="px-4 py-3 align-top pt-4">${datesCell}</td>
+      <td class="px-4 py-3 align-top pt-4">${targetCell}</td>
+      <td class="px-4 py-3 align-top pt-4">${bookingPriceCell}</td>
+      <td class="px-4 py-3 align-top pt-4">${hotelCell}${pkgCell}</td>
+      <td class="px-4 py-3 text-xs text-slate-400 whitespace-nowrap align-top pt-4">${fmtDate(row.addedAt)}</td>
       <td class="px-4 py-3 align-top pt-4 text-center">
         <a href="${escHtml(row.url)}" target="_blank" rel="noopener noreferrer"
            class="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors font-medium whitespace-nowrap">
@@ -82,20 +78,15 @@ function renderRow(row) {
           Open
         </a>
       </td>
-      <!-- col 3 -->
-      <td class="px-4 py-3 align-top pt-4">${emailCell}</td>
-      <!-- col 4 -->
-      <td class="px-4 py-3 align-top pt-4">${tgCell}</td>
-      <!-- col 5 -->
-      <td class="px-4 py-3 align-top pt-4">${datesCell}</td>
-      <!-- col 6 -->
-      <td class="px-4 py-3 align-top pt-4">${targetCell}</td>
-      <!-- col 7 -->
-      <td class="px-4 py-3 align-top pt-4">${bookingPriceCell}</td>
-      <!-- col 8 -->
-      <td class="px-4 py-3 align-top pt-4">${hotelCell}${pkgCell}</td>
-      <!-- col 9 (rightmost on screen) -->
-      <td class="px-4 py-3 text-xs text-slate-400 whitespace-nowrap align-top pt-4">${fmtDate(row.addedAt)}</td>
+      <td class="px-4 py-3 align-top pt-4 text-center">
+        <button onclick="deleteRow('${id}')"
+           class="inline-flex items-center gap-1.5 bg-red-500/10 hover:bg-red-500 active:bg-red-700 text-red-400 hover:text-white text-xs px-3 py-1.5 rounded-lg transition-all border border-red-500/30 hover:border-transparent font-medium whitespace-nowrap">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+          </svg>
+          Delete
+        </button>
+      </td>
     </tr>`;
 }
 
@@ -192,8 +183,6 @@ function renderAdminPage(rows) {
         <table class="w-full" dir="ltr">
           <thead>
             <tr class="bg-slate-700/40 text-slate-400 text-xs font-semibold uppercase tracking-wider border-b border-slate-700">
-              <th class="px-4 py-3 text-center whitespace-nowrap">Actions</th>
-              <th class="px-4 py-3 text-center whitespace-nowrap">Hotel Link</th>
               <th class="px-4 py-3 text-left  whitespace-nowrap">Email</th>
               <th class="px-4 py-3 text-left  whitespace-nowrap">Telegram ID</th>
               <th class="px-4 py-3 text-left  whitespace-nowrap">Vacation Dates</th>
@@ -201,6 +190,8 @@ function renderAdminPage(rows) {
               <th class="px-4 py-3 text-left  whitespace-nowrap">Booking Price</th>
               <th class="px-4 py-3 text-left  whitespace-nowrap">Hotel Name</th>
               <th class="px-4 py-3 text-left  whitespace-nowrap">Date Added</th>
+              <th class="px-4 py-3 text-center whitespace-nowrap">Hotel Link</th>
+              <th class="px-4 py-3 text-center whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody id="table-body">
