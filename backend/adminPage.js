@@ -59,10 +59,10 @@ function renderRow(row) {
   const guestsVal = row.guests != null ? row.guests : null;
   const roomsVal  = row.rooms  != null ? row.rooms  : null;
   const stayParts = [];
-  if (guestsVal != null) stayParts.push(`${guestsVal} אורח${guestsVal !== 1 ? 'ים' : ''}`);
-  if (roomsVal  != null) stayParts.push(`${roomsVal} חדר${roomsVal  !== 1 ? 'ים' : ''}`);
+  if (guestsVal != null) stayParts.push(`${guestsVal} אורחים`);
+  if (roomsVal  != null) stayParts.push(`${roomsVal} חדרים`);
   const stayCell = stayParts.length > 0
-    ? `<div class="text-xs text-slate-300">${stayParts.join(', ')}</div>`
+    ? `<div class="text-xs text-slate-300" dir="rtl">${stayParts.join(' | ')}</div>`
     : `<span class="text-slate-500 italic text-xs">N/A</span>`;
 
   const id = escHtml(String(row._id));
