@@ -13,7 +13,7 @@ const { renderAdminPage } = require('./adminPage');
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
-// ── Pure Node.js Basic Auth (no external packages) ────────────────────────────
+// ── Pure Node.js Basic Auth (no external packages) — Railway Deploy Trigger ───
 const adminAuth = (req, res, next) => {
   const b64auth = (req.headers.authorization || '').split(' ')[1] || '';
   const [login, password] = Buffer.from(b64auth, 'base64').toString().split(':');
