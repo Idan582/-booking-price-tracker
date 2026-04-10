@@ -4,7 +4,6 @@ require('dotenv').config();
 
 const express          = require('express');
 const cors             = require('cors');
-const basicAuth        = require('express-basic-auth');
 const mongoose         = require('mongoose');
 const cron             = require('node-cron');
 const { runScrapeJob }    = require('./scraper');
@@ -14,14 +13,18 @@ const { renderAdminPage } = require('./adminPage');
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
-// ── HTTP Basic Auth ───────────────────────────────────────────────────────────
-const adminAuth = basicAuth({
-  users: {
-    [process.env.ADMIN_USERNAME || 'admin']: process.env.ADMIN_PASSWORD || 'changeme',
-  },
-  challenge: true,
-  realm: 'Booking Price Tracker Admin',
-});
+// ── Pure Node.js Basic Auth (no external packages) ────────────────────────────
+const adminAuth = (req, res, next) => {
+  const b64auth = (req.headers.authorization || '').split(' ')[1] || '';
+  const [login, password] = Buffer.from(b64auth, 'base64').toString().split(':');
+
+  if (login && password && login === process.env.ADMIN_USERNAME && password === process.env.ADMIN_PASSWORD) {
+    return next();
+  }
+
+  res.set('WWW-Authenticate', 'Basic realm="Admin Area"');
+  res.status(401).send('Authentication required.');
+};
 
 // ── Global middleware ─────────────────────────────────────────────────────────
 app.use(cors({ origin: '*' }));
@@ -75,13 +78,13 @@ app.post('/api/track', async (req, res) => {
         email:          email          || null,
         telegram:       telegram === true,
         telegramChatId: telegramChatId || null,
-        ...(parsedOriginal                                     && { originalPrice: parsedOriginal }),
-        ...(roomType                                           && { roomType }),
-        ...(hotelName                                          && { hotelName }),
-        ...(checkIn                                            && { checkIn }),
-        ...(checkOut                                           && { checkOut }),
-        ...(guests != null && !isNaN(Number(guests))           && { guests: Number(guests) }),
-        ...(rooms  != null && !isNaN(Number(rooms))            && { rooms:  Number(rooms)  }),
+        ...(parsedOriginal                           && { originalPrice: parsedOriginal }),
+        ...(roomType                                 && { roomType }),
+        ...(hotelName                                && { hotelName }),
+        ...(checkIn                                  && { checkIn }),
+        ...(checkOut                                 && { checkOut }),
+        ...(guests != null && !isNaN(Number(guests)) && { guests: Number(guests) }),
+        ...(rooms  != null && !isNaN(Number(rooms))  && { rooms:  Number(rooms)  }),
       },
       $setOnInsert: { alertCount: 0 },
     };
@@ -133,7 +136,8 @@ app.post('/api/scrape', adminAuth, (_req, res) => {
 });
 
 // ── GET /admin  (admin) ───────────────────────────────────────────────────────
-app.get('/admin', adminAuth, async (_req, res) => {
+app.use('/admin', adminAuth);
+app.get('/admin', async (_req, res) => {
   try {
     const rows = await TrackingRequest.find().sort({ addedAt: -1 }).lean();
     res.send(renderAdminPage(rows));
@@ -166,7 +170,7 @@ app.listen(PORT, () => {
   console.log(`  POST   /api/scrape    — admin`);
   console.log(`  GET    /admin         — admin`);
   console.log(`  GET    /health        — public`);
-  console.log(`\nAdmin   : ${process.env.ADMIN_USERNAME    ? '✓ ' + process.env.ADMIN_USERNAME : '✗ using default'}`);
+  console.log(`\nAdmin   : ${process.env.ADMIN_USERNAME    ? '✓ ' + process.env.ADMIN_USERNAME : '✗ ADMIN_USERNAME not set'}`);
   console.log(`Email   : ${process.env.EMAIL_USER         ? '✓ ' + process.env.EMAIL_USER     : '✗ not set'}`);
   console.log(`Telegram: ${process.env.TELEGRAM_BOT_TOKEN ? '✓ configured'                   : '✗ not set'}`);
   console.log(`MongoDB : ${MONGODB_URI                    ? '✓ URI present'                  : '✗ not set'}\n`);
