@@ -217,7 +217,7 @@ function renderAdminPage(rows) {
               <th class="px-4 py-3 text-left  whitespace-nowrap">Booking Price</th>
               <th class="px-4 py-3 text-left  whitespace-nowrap">Hotel Name</th>
               <th class="px-4 py-3 text-left  whitespace-nowrap">Stay Details</th>
-              <th class="px-4 py-3 text-left  whitespace-nowrap">מעורבות מהתראות</th>
+              <th class="px-4 py-3 text-left  whitespace-nowrap">Alert Engagement</th>
               <th class="px-4 py-3 text-left  whitespace-nowrap">Date Added</th>
               <th class="px-4 py-3 text-center whitespace-nowrap">Hotel Link</th>
               <th class="px-4 py-3 text-center whitespace-nowrap">Actions</th>
