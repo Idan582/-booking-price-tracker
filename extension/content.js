@@ -945,9 +945,11 @@
       // Scrape dates from URL params and hotel name from DOM at submit time
       var meta = scrapePageMeta();
 
-      // Append #availability_target so "Open" link jumps straight to the rooms table
-      var baseUrl = window.location.href.split('#')[0];
-      var trackUrl = baseUrl + '#availability_target';
+      // Build URL with highlight_room param so the extension highlights the exact row on open
+      var urlObj = new URL(window.location.href.split('#')[0]);
+      urlObj.searchParams.delete('highlight_room');
+      if (roomType) urlObj.searchParams.set('highlight_room', roomType);
+      var trackUrl = urlObj.toString();
 
       var payload = {
         url:            trackUrl,
@@ -1010,6 +1012,61 @@
     modal.querySelector('.bpt-close-ok').addEventListener('click', closeModal);
   }
 
+  // ── Room highlighter ─────────────────────────────────────────────────────────
+  // Called on page load when ?highlight_room=... is present in the URL.
+  // Finds the matching room block, scrolls to it, and applies a purple glow.
+
+  var ROOM_BLOCK_SELS =
+    '[data-testid="rt-roomtype-block"], [data-testid="hprt-roomtype-block"], ' +
+    '[data-testid="room-type-block"], [data-testid="roomtype-block"]';
+
+  function highlightTargetRoom(roomName) {
+    var needle = roomName.trim().toLowerCase();
+    var found  = null;
+
+    // Try named room-type blocks first (React layout)
+    document.querySelectorAll(ROOM_BLOCK_SELS).forEach(function (block) {
+      if (found) return;
+      var nameEl = block.querySelector(ROOM_NAME_SELS);
+      if (nameEl && cleanText(nameEl).toLowerCase() === needle) found = block;
+    });
+
+    // Fallback: any element matching room-name selectors
+    if (!found) {
+      var nameEls = document.querySelectorAll(ROOM_NAME_SELS);
+      for (var i = 0; i < nameEls.length; i++) {
+        if (cleanText(nameEls[i]).toLowerCase() === needle) {
+          found = nameEls[i].closest(ROOM_BLOCK_SELS) ||
+                  nameEls[i].closest('tr') ||
+                  nameEls[i].parentElement;
+          break;
+        }
+      }
+    }
+
+    if (!found) return false;
+
+    found.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    found.style.outline         = '4px solid #8b5cf6';
+    found.style.backgroundColor = 'rgba(139, 92, 246, 0.1)';
+    found.style.borderRadius    = '8px';
+    found.style.transition      = 'outline 0.3s ease, background-color 0.3s ease';
+    return true;
+  }
+
+  function initHighlight() {
+    var roomName = new URLSearchParams(window.location.search).get('highlight_room');
+    if (!roomName) return;
+
+    // Try immediately (static pages), then retry every 600 ms for React renders
+    if (highlightTargetRoom(roomName)) return;
+    var attempts = 0;
+    var timer = setInterval(function () {
+      attempts++;
+      if (highlightTargetRoom(roomName) || attempts >= 15) clearInterval(timer);
+    }, 600);
+  }
+
   // ── MutationObserver ─────────────────────────────────────────────────────────
 
   function startObserver() {
@@ -1034,5 +1091,6 @@
   injectStyles();
   injectButtons();
   startObserver();
+  initHighlight();
 
 })();
