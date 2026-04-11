@@ -2,6 +2,7 @@
 
 require('dotenv').config();
 
+const path             = require('path');
 const express          = require('express');
 const cors             = require('cors');
 const mongoose         = require('mongoose');
@@ -33,6 +34,7 @@ const adminAuth = (req, res, next) => {
 // ── Global middleware ─────────────────────────────────────────────────────────
 app.use(cors({ origin: '*' }));
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
 // ── MongoDB ───────────────────────────────────────────────────────────────────
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -168,6 +170,7 @@ cron.schedule('0 */2 * * *', () => {
 // ── Start ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\nBooking Price Tracker — port ${PORT}`);
+  console.log(`  GET    /              — public (form)`);
   console.log(`  POST   /api/track     — public`);
   console.log(`  GET    /api/track     — admin`);
   console.log(`  DELETE /api/track/:id — admin`);
