@@ -335,13 +335,24 @@ function extractPriceInPage(targetPkg) {
 async function scrapeOneHotel(hotel, browser) {
   console.log(`\n[Scraper] ↳ "${hotel.roomPackage}"`);
 
+  // Force English layout — more stable selectors than Hebrew
+  const scrapeUrl = (() => {
+    try {
+      const u = new URL(hotel.url);
+      u.searchParams.set('lang', 'en-gb');
+      return u.toString();
+    } catch {
+      return hotel.url + (hotel.url.includes('?') ? '&' : '?') + 'lang=en-gb';
+    }
+  })();
+
   const context = await browser.newContext({
     userAgent:
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
       'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.207 Safari/537.36',
-    locale: 'he-IL',
+    locale: 'en-GB',
     extraHTTPHeaders: {
-      'Accept-Language': 'he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Accept-Language': 'en-GB,en;q=0.9,he;q=0.8',
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
       'Accept-Encoding': 'gzip, deflate, br',
       'Cache-Control': 'no-cache',
@@ -356,9 +367,13 @@ async function scrapeOneHotel(hotel, browser) {
   const page = await context.newPage();
 
   try {
-    await page.goto(hotel.url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.goto(scrapeUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
 
-    // Step 1 — wait for the room table or React blocks
+    // Log page title — tells us immediately if we hit a captcha / security screen
+    const pageTitle = await page.title();
+    console.log("--- Page Title: " + pageTitle);
+
+    // Wait for the room table or React blocks
     await Promise.race([
       page.waitForSelector(
         'table.hprt-table, #hprt-table, [data-selenium="hotel-availability-table"]',
@@ -369,7 +384,7 @@ async function scrapeOneHotel(hotel, browser) {
       console.warn('[Scraper]   ⚠ Timed out waiting for room table — page may not have loaded.');
     });
 
-    // Step 2 — wait for at least one price element to be visible
+    // Wait for at least one price element to become visible
     await page.waitForSelector(
       '.hprt-price-price, .prco-valign-middle-helper, ' +
       '[data-testid="price-and-discounted-price"], [data-testid="price-and-possession"], ' +
@@ -379,10 +394,55 @@ async function scrapeOneHotel(hotel, browser) {
       console.warn('[Scraper]   ⚠ Timed out waiting for a visible price element.');
     });
 
-    // Step 3 — extra hydration time for lazy-loaded prices
-    await page.waitForTimeout(4000);
+    // 10-second wait for full React hydration
+    await page.waitForTimeout(10000);
 
-    const currentPrice = await page.evaluate(extractPriceInPage, hotel.roomPackage);
+    // ── CSS-selector strategy (existing extractPriceInPage) ──────────────────
+    let currentPrice = await page.evaluate(extractPriceInPage, hotel.roomPackage);
+
+    // ── Regex / deep-search fallback ─────────────────────────────────────────
+    if (currentPrice === null) {
+      console.warn('[Scraper]   ⚠ CSS strategies failed — trying regex deep search...');
+
+      const pageText = await page.evaluate(() => document.body.innerText);
+
+      // Find all prices expressed as ₪1,234 or 1,234 ₪ (English layout uses £/€/$ but
+      // the stored price is in ILS so we also accept raw numbers near "ILS" or "Total")
+      const patterns = [
+        /₪\s*([\d,]+)/g,
+        /([\d,]+)\s*₪/g,
+        /ILS\s*([\d,]+)/g,
+        /([\d,]+)\s*ILS/g,
+      ];
+
+      const allPrices = [];
+      for (const re of patterns) {
+        let m;
+        re.lastIndex = 0;
+        while ((m = re.exec(pageText)) !== null) {
+          const n = parseFloat(m[1].replace(/,/g, ''));
+          if (!isNaN(n) && n > 0 && n < 100000) allPrices.push(n);
+        }
+      }
+
+      if (allPrices.length > 0) {
+        // Prefer a price near "Total" / סה"כ in the page text
+        const totalMatch = pageText.match(/(?:Total|סה[""׳]כ)[^\d]*?([\d,]+)/i);
+        if (totalMatch) {
+          const n = parseFloat(totalMatch[1].replace(/,/g, ''));
+          if (!isNaN(n) && n > 0 && n < 100000) {
+            currentPrice = n;
+            console.log('[Scraper]   ✓ Price found via Total/סה"כ regex: ' + currentPrice);
+          }
+        }
+        // Fallback: take the smallest plausible price (room rate, not grand total)
+        if (currentPrice === null) {
+          allPrices.sort((a, b) => a - b);
+          currentPrice = allPrices[0];
+          console.log('[Scraper]   ✓ Price found via regex scan (lowest): ' + currentPrice);
+        }
+      }
+    }
 
     if (currentPrice === null) {
       const pageContent = await page.content();
