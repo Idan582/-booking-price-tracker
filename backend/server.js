@@ -18,7 +18,7 @@ const adminAuth = (req, res, next) => {
   const b64auth = (req.headers.authorization || '').split(' ')[1] || '';
   const [login, password] = Buffer.from(b64auth, 'base64').toString().split(':');
 
-  if (login === 'lior' && password === '1234') {
+  if (login && password && login === process.env.ADMIN_USERNAME && password === process.env.ADMIN_PASSWORD) {
     return next();
   }
 
