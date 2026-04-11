@@ -211,13 +211,26 @@ function extractPriceInPage(targetPkg) {
   }
 
   var PRICE_SELS = [
+    // 2024-2025 data-testid variants
     '[data-testid="price-and-discounted-price"]',
     '[data-testid="recommended-units-price"]',
     '[data-testid="price-for-x-nights"]',
+    '[data-testid="price-and-possession"]',
+    '[data-testid="price"]',
+    // Classic table classes
     '.hprt-price-price',
     '.bui-price-display__value',
+    '.prco-valign-middle-helper',
+    '.prco-text-nowrap-helper',
+    // Generic class fragments
     '[class*="finalPrice"]',
     '[class*="prco-inline"]',
+    '[class*="priceValue"]',
+    '[class*="price-value"]',
+    '[class*="ugiat"]',        // obfuscated React bundles often contain this fragment
+    // Currency element wrappers
+    '[data-et-click*="price"]',
+    'span[aria-hidden="true"]',
   ].join(',');
 
   var COND_SELS = [
@@ -295,6 +308,25 @@ function extractPriceInPage(targetPkg) {
     }
   }
 
+  // ── Strategy 3: Currency-text fallback ───────────────────────────────────
+  // Walk every element that contains ₪ or ILS and try to parse a price near
+  // text that matches the target package (loose substring match).
+  var allEls = Array.from(document.querySelectorAll('*'));
+  for (var e = 0; e < allEls.length; e++) {
+    var el = allEls[e];
+    var txt = el.textContent || '';
+    if ((txt.indexOf('₪') === -1 && txt.indexOf('ILS') === -1) || el.children.length > 5) continue;
+    var raw = txt.replace(/[^\d.,]/g, '').replace(/,/g, '');
+    var n   = parseFloat(raw);
+    if (isNaN(n) || n <= 0 || n > 100000) continue;
+    // Accept if the surrounding section text contains part of the package name
+    var section = el.closest('[data-testid], tr, .hprt-roomtype-offer, [class*="room"]');
+    var sectionText = section ? section.textContent : '';
+    var pkgWords = targetPkg.split(/\s+/).slice(0, 3); // first 3 words of package
+    var match = pkgWords.some(function(w) { return w.length > 3 && sectionText.indexOf(w) !== -1; });
+    if (match) return n;
+  }
+
   return null; // package not found on page
 }
 
@@ -326,6 +358,7 @@ async function scrapeOneHotel(hotel, browser) {
   try {
     await page.goto(hotel.url, { waitUntil: 'domcontentloaded', timeout: 45000 });
 
+    // Step 1 — wait for the room table or React blocks
     await Promise.race([
       page.waitForSelector(
         'table.hprt-table, #hprt-table, [data-selenium="hotel-availability-table"]',
@@ -336,11 +369,24 @@ async function scrapeOneHotel(hotel, browser) {
       console.warn('[Scraper]   ⚠ Timed out waiting for room table — page may not have loaded.');
     });
 
-    await page.waitForTimeout(3000);
+    // Step 2 — wait for at least one price element to be visible
+    await page.waitForSelector(
+      '.hprt-price-price, .prco-valign-middle-helper, ' +
+      '[data-testid="price-and-discounted-price"], [data-testid="price-and-possession"], ' +
+      '[data-testid="recommended-units-price"], .bui-price-display__value',
+      { state: 'visible', timeout: 15000 }
+    ).catch(() => {
+      console.warn('[Scraper]   ⚠ Timed out waiting for a visible price element.');
+    });
+
+    // Step 3 — extra hydration time for lazy-loaded prices
+    await page.waitForTimeout(4000);
 
     const currentPrice = await page.evaluate(extractPriceInPage, hotel.roomPackage);
 
     if (currentPrice === null) {
+      const pageContent = await page.content();
+      console.log("--- HTML Content Preview: " + pageContent.substring(0, 500));
       console.warn('[Scraper]   ⚠ Package not found on page (layout may have changed).');
       return;
     }
