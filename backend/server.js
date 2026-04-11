@@ -19,10 +19,10 @@ const adminAuth = (req, res, next) => {
   const [login, password] = Buffer.from(b64auth, 'base64').toString().split(':');
 
   console.log("--- Auth Debug ---");
-  console.log("1. ENV Username:", process.env.ADMIN_USERNAME ? `Set (${process.env.ADMIN_USERNAME.length} chars)` : "UNDEFINED");
-  console.log("2. ENV Password:", process.env.ADMIN_PASSWORD ? "Set (hidden)" : "UNDEFINED");
+  console.log("1. ENV Username:", process.env.TRACKER_USER ? `Set (${process.env.TRACKER_USER.length} chars)` : "UNDEFINED");
+  console.log("2. ENV Password:", process.env.TRACKER_PASS ? "Set (hidden)" : "UNDEFINED");
   console.log("3. User typed login:", login ? `Set (${login.length} chars)` : "UNDEFINED");
-  if (login && password && login === process.env.ADMIN_USERNAME && password === process.env.ADMIN_PASSWORD) {
+  if (login && password && login === process.env.TRACKER_USER && password === process.env.TRACKER_PASS) {
     return next();
   }
 
@@ -174,7 +174,7 @@ app.listen(PORT, () => {
   console.log(`  POST   /api/scrape    — admin`);
   console.log(`  GET    /admin         — admin`);
   console.log(`  GET    /health        — public`);
-  console.log(`\nAdmin   : ${process.env.ADMIN_USERNAME    ? '✓ ' + process.env.ADMIN_USERNAME : '✗ ADMIN_USERNAME not set'}`);
+  console.log(`\nAdmin   : ${process.env.TRACKER_USER    ? '✓ ' + process.env.TRACKER_USER : '✗ TRACKER_USER not set'}`);
   console.log(`Email   : ${process.env.EMAIL_USER         ? '✓ ' + process.env.EMAIL_USER     : '✗ not set'}`);
   console.log(`Telegram: ${process.env.TELEGRAM_BOT_TOKEN ? '✓ configured'                   : '✗ not set'}`);
   console.log(`MongoDB : ${MONGODB_URI                    ? '✓ URI present'                  : '✗ not set'}\n`);
