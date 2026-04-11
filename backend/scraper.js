@@ -20,7 +20,6 @@ require('dotenv').config();
 
 const { chromium }    = require('playwright');
 const nodemailer      = require('nodemailer');
-const { Telegraf }    = require('telegraf');
 const mongoose        = require('mongoose');
 const TrackingRequest = require('./models/TrackingRequest');
 
@@ -43,8 +42,9 @@ function hotelNameFromUrl(url) {
 // ── Email alert (Gmail SMTP) ─────────────────────────────────────────────────
 
 async function sendEmailAlert({ to, roomPackage, currentPrice, targetPrice, url, hotelName, alertCount }) {
-  const user = process.env.EMAIL_USER;
-  const pass = process.env.EMAIL_PASS;
+  const user     = process.env.EMAIL_USER;
+  const pass     = process.env.EMAIL_PASS;
+  const fromAddr = process.env.EMAIL_FROM || user;
 
   if (!user || !pass) {
     console.error('[Email] Missing EMAIL_USER / EMAIL_PASS in .env — alert skipped.');
@@ -175,33 +175,10 @@ async function sendEmailAlert({ to, roomPackage, currentPrice, targetPrice, url,
 </body>
 </html>`;
 
-  const info = await transporter.sendMail({ from: `Booking Price Tracker <${user}>`, to, subject, html });
-  console.log(`[Email] ✓ Sent → ${to} (${info.messageId})`);
-}
-
-// ── Telegram alert ───────────────────────────────────────────────────────────
-
-async function sendTelegramAlert({ roomPackage, currentPrice, targetPrice, url, chatId }) {
-  const token          = process.env.TELEGRAM_BOT_TOKEN;
-  const resolvedChatId = chatId || process.env.TELEGRAM_CHAT_ID;
-
-  if (!token) {
-    console.error('[Telegram] Missing TELEGRAM_BOT_TOKEN in .env — alert skipped.');
-    return;
-  }
-  if (!resolvedChatId) {
-    console.error('[Telegram] No Chat ID for this entry and TELEGRAM_CHAT_ID not set in .env — alert skipped.');
-    return;
-  }
-
-  const bot  = new Telegraf(token);
-  const text =
-    `🔔 מעקב מחיר: "${roomPackage}" ירד ל-₪${Math.round(currentPrice)} ` +
-    `(יעד שלך: ₪${Math.round(targetPrice)}).\n\nהזמן עכשיו: ${url}`;
-
-  console.log('Sending Telegram alert to ID: ' + resolvedChatId);
-  await bot.telegram.sendMessage(resolvedChatId, text);
-  console.log(`[Telegram] ✓ Sent → chat ${resolvedChatId}`);
+  const userEmail = to;
+  const info = await transporter.sendMail({ from: `Booking Price Tracker <${fromAddr}>`, to: userEmail, subject, html });
+  console.log("Email sent to: " + userEmail);
+  console.log(`[Email] ✓ Sent → ${userEmail} (${info.messageId})`);
 }
 
 // ── Price extraction — runs INSIDE the Playwright browser context ────────────
@@ -408,17 +385,7 @@ async function runScrapeJob() {
             }).catch((err) => console.error('[Scraper]   Email error:', err.message));
           }
 
-          if (hotel.telegram) {
-            await sendTelegramAlert({
-              roomPackage:  hotel.roomPackage,
-              currentPrice: currentPrice,
-              targetPrice:  hotel.targetPrice,
-              url:          hotel.url,
-              chatId:       hotel.telegramChatId || null,
-            }).catch((err) => console.error('[Scraper]   Telegram error:', err.message));
-          }
-
-          if (!hotel.email && !hotel.telegram) {
+          if (!hotel.email) {
             console.warn('[Scraper]   No notification channel configured — alert skipped.');
           }
 
