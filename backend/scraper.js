@@ -306,9 +306,19 @@ async function scrapeOneHotel(hotel, browser) {
   const context = await browser.newContext({
     userAgent:
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
-      'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.207 Safari/537.36',
     locale: 'he-IL',
-    extraHTTPHeaders: { 'Accept-Language': 'he-IL,he;q=0.9,en;q=0.8' },
+    extraHTTPHeaders: {
+      'Accept-Language': 'he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Upgrade-Insecure-Requests': '1',
+    },
     viewport: { width: 1280, height: 900 },
   });
   const page = await context.newPage();
@@ -335,6 +345,7 @@ async function scrapeOneHotel(hotel, browser) {
       return;
     }
 
+    console.log("--- Price found: " + currentPrice);
     console.log(`[Scraper]   Current: ₪${currentPrice}  |  Target: ₪${hotel.targetPrice}`);
 
     if (currentPrice < hotel.targetPrice) {
@@ -342,15 +353,20 @@ async function scrapeOneHotel(hotel, browser) {
       console.log(`[Scraper]   🔔 PRICE DROP (alert #${alertCount + 1}) — sending alerts...`);
 
       if (hotel.email) {
+        const userEmail = hotel.email;
+        console.log("--- Attempting to send email to: " + userEmail);
         await sendEmailAlert({
-          to:           hotel.email,
+          to:           userEmail,
           roomPackage:  hotel.roomPackage,
           currentPrice: currentPrice,
           targetPrice:  hotel.targetPrice,
           url:          hotel.url,
           hotelName:    hotelNameFromUrl(hotel.url),
           alertCount:   alertCount,
-        }).catch((err) => console.error('[Scraper]   Email error:', err.message));
+        }).catch((error) => {
+          console.log("--- Mailer Error: ", error);
+          console.error('[Scraper]   Email error:', error.message);
+        });
       }
 
       if (!hotel.email) {
@@ -382,6 +398,7 @@ async function scrapeOneHotel(hotel, browser) {
 async function runScrapeForDoc(doc) {
   const hotelUrl = doc.url;
   console.log("Immediate scrape triggered for: " + hotelUrl);
+  console.log("--- Starting Scrape for: " + hotelUrl);
 
   const browser = await chromium.launch({
     headless: true,
