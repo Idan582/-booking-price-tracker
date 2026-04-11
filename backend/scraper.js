@@ -298,7 +298,103 @@ function extractPriceInPage(targetPkg) {
   return null; // package not found on page
 }
 
-// ── Main scrape job ──────────────────────────────────────────────────────────
+// ── Per-hotel scrape logic (shared by cron job and immediate trigger) ─────────
+
+async function scrapeOneHotel(hotel, browser) {
+  console.log(`\n[Scraper] ↳ "${hotel.roomPackage}"`);
+
+  const context = await browser.newContext({
+    userAgent:
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
+      'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    locale: 'he-IL',
+    extraHTTPHeaders: { 'Accept-Language': 'he-IL,he;q=0.9,en;q=0.8' },
+    viewport: { width: 1280, height: 900 },
+  });
+  const page = await context.newPage();
+
+  try {
+    await page.goto(hotel.url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+
+    await Promise.race([
+      page.waitForSelector(
+        'table.hprt-table, #hprt-table, [data-selenium="hotel-availability-table"]',
+        { timeout: 20000 }
+      ),
+      page.waitForSelector('[data-testid="rt-roomtype-block"]', { timeout: 20000 }),
+    ]).catch(() => {
+      console.warn('[Scraper]   ⚠ Timed out waiting for room table — page may not have loaded.');
+    });
+
+    await page.waitForTimeout(3000);
+
+    const currentPrice = await page.evaluate(extractPriceInPage, hotel.roomPackage);
+
+    if (currentPrice === null) {
+      console.warn('[Scraper]   ⚠ Package not found on page (layout may have changed).');
+      return;
+    }
+
+    console.log(`[Scraper]   Current: ₪${currentPrice}  |  Target: ₪${hotel.targetPrice}`);
+
+    if (currentPrice < hotel.targetPrice) {
+      const alertCount = hotel.alertCount || 0;
+      console.log(`[Scraper]   🔔 PRICE DROP (alert #${alertCount + 1}) — sending alerts...`);
+
+      if (hotel.email) {
+        await sendEmailAlert({
+          to:           hotel.email,
+          roomPackage:  hotel.roomPackage,
+          currentPrice: currentPrice,
+          targetPrice:  hotel.targetPrice,
+          url:          hotel.url,
+          hotelName:    hotelNameFromUrl(hotel.url),
+          alertCount:   alertCount,
+        }).catch((err) => console.error('[Scraper]   Email error:', err.message));
+      }
+
+      if (!hotel.email) {
+        console.warn('[Scraper]   No notification channel configured — alert skipped.');
+      }
+
+      try {
+        await TrackingRequest.findByIdAndUpdate(hotel._id, {
+          $set: { targetPrice: currentPrice },
+          $inc: { alertCount: 1 },
+        });
+        console.log(`[Scraper]   ✓ targetPrice → ₪${currentPrice}, alertCount → ${alertCount + 1} saved.`);
+      } catch (writeErr) {
+        console.error('[Scraper]   Failed to save updated fields:', writeErr.message);
+      }
+    } else {
+      const gap = currentPrice - hotel.targetPrice;
+      console.log(`[Scraper]   ✓ No drop (₪${gap} above target). Continuing to monitor.`);
+    }
+  } catch (err) {
+    console.error('[Scraper]   Error:', err.message);
+  } finally {
+    await context.close();
+  }
+}
+
+// ── Immediate single-hotel scrape (called on POST /api/track) ─────────────────
+
+async function runScrapeForDoc(doc) {
+  const hotelUrl = doc.url;
+  console.log("Immediate scrape triggered for: " + hotelUrl);
+
+  const browser = await chromium.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
+  try {
+    await scrapeOneHotel(doc, browser);
+  } finally {
+    await browser.close();
+  }
+}
+
+// ── Main scrape job (cron — checks all tracked hotels) ───────────────────────
 
 async function runScrapeJob() {
   console.log(`\n[Scraper] ─── Price check started at ${new Date().toISOString()} ───`);
@@ -330,85 +426,7 @@ async function runScrapeJob() {
 
   try {
     for (const hotel of hotels) {
-      console.log(`\n[Scraper] ↳ "${hotel.roomPackage}"`);
-
-      // Fresh isolated browser context per hotel — no cookie bleed between requests
-      const context = await browser.newContext({
-        userAgent:
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
-          'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        locale: 'he-IL',
-        extraHTTPHeaders: { 'Accept-Language': 'he-IL,he;q=0.9,en;q=0.8' },
-        viewport: { width: 1280, height: 900 },
-      });
-      const page = await context.newPage();
-
-      try {
-        await page.goto(hotel.url, { waitUntil: 'domcontentloaded', timeout: 45000 });
-
-        // Wait for the availability table or React blocks — whichever loads first
-        await Promise.race([
-          page.waitForSelector(
-            'table.hprt-table, #hprt-table, [data-selenium="hotel-availability-table"]',
-            { timeout: 20000 }
-          ),
-          page.waitForSelector('[data-testid="rt-roomtype-block"]', { timeout: 20000 }),
-        ]).catch(() => {
-          console.warn('[Scraper]   ⚠ Timed out waiting for room table — page may not have loaded.');
-        });
-
-        // Allow React to finish hydrating lazy-loaded prices
-        await page.waitForTimeout(3000);
-
-        const currentPrice = await page.evaluate(extractPriceInPage, hotel.roomPackage);
-
-        if (currentPrice === null) {
-          console.warn('[Scraper]   ⚠ Package not found on page (layout may have changed).');
-          continue;
-        }
-
-        console.log(`[Scraper]   Current: ₪${currentPrice}  |  Target: ₪${hotel.targetPrice}`);
-
-        if (currentPrice < hotel.targetPrice) {
-          const alertCount = hotel.alertCount || 0;
-          console.log(`[Scraper]   🔔 PRICE DROP (alert #${alertCount + 1}) — sending alerts...`);
-
-          if (hotel.email) {
-            await sendEmailAlert({
-              to:           hotel.email,
-              roomPackage:  hotel.roomPackage,
-              currentPrice: currentPrice,
-              targetPrice:  hotel.targetPrice,
-              url:          hotel.url,
-              hotelName:    hotelNameFromUrl(hotel.url),
-              alertCount:   alertCount,
-            }).catch((err) => console.error('[Scraper]   Email error:', err.message));
-          }
-
-          if (!hotel.email) {
-            console.warn('[Scraper]   No notification channel configured — alert skipped.');
-          }
-
-          // Advance targetPrice and increment alertCount in MongoDB so the next
-          // run only alerts on a further drop, and repeat emails get the repeat subject.
-          try {
-            await TrackingRequest.findByIdAndUpdate(hotel._id, {
-              $set: { targetPrice: currentPrice },
-              $inc: { alertCount: 1 },
-            });
-            console.log(`[Scraper]   ✓ targetPrice → ₪${currentPrice}, alertCount → ${alertCount + 1} saved.`);
-          } catch (writeErr) {
-            console.error('[Scraper]   Failed to save updated fields:', writeErr.message);
-          }
-        } else {
-          const gap = currentPrice - hotel.targetPrice;
-          console.log(`[Scraper]   ✓ No drop (₪${gap} above target). Continuing to monitor.`);
-        }
-      } catch (err) {
-        console.error('[Scraper]   Error:', err.message);
-      } finally {
-        await context.close();
-      }
+      await scrapeOneHotel(hotel, browser);
     }
   } finally {
     await browser.close();
@@ -417,4 +435,4 @@ async function runScrapeJob() {
   console.log('\n[Scraper] ─── Price check complete ───\n');
 }
 
-module.exports = { runScrapeJob };
+module.exports = { runScrapeJob, runScrapeForDoc };

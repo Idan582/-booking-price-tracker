@@ -7,7 +7,7 @@ const express          = require('express');
 const cors             = require('cors');
 const mongoose         = require('mongoose');
 const cron             = require('node-cron');
-const { runScrapeJob }    = require('./scraper');
+const { runScrapeJob, runScrapeForDoc } = require('./scraper');
 const TrackingRequest     = require('./models/TrackingRequest');
 const { renderAdminPage } = require('./adminPage');
 
@@ -103,10 +103,16 @@ app.post('/api/track', async (req, res) => {
     const channels = [doc.email && 'email', doc.telegram && 'telegram'].filter(Boolean).join(', ') || 'none';
     console.log(`[${isNew ? 'ADDED' : 'UPDATED'}] "${doc.roomPackage}" → ₪${price} — notify: ${channels}`);
 
-    return res.status(200).json({
+    // Respond immediately, then kick off a scrape in the background
+    res.status(200).json({
       message: isNew ? 'Tracking started successfully.' : 'Tracking updated successfully.',
       entry:   doc,
     });
+
+    runScrapeForDoc(doc.toObject()).catch((err) =>
+      console.error('[Scraper] Immediate scrape failed:', err.message)
+    );
+    return;
   } catch (err) {
     console.error('[POST /api/track] Error:', err.message);
     return res.status(500).json({ error: err.message });
