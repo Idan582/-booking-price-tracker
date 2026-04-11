@@ -18,6 +18,10 @@ const adminAuth = (req, res, next) => {
   const b64auth = (req.headers.authorization || '').split(' ')[1] || '';
   const [login, password] = Buffer.from(b64auth, 'base64').toString().split(':');
 
+  console.log("--- Auth Debug ---");
+  console.log("1. ENV Username:", process.env.ADMIN_USERNAME ? `Set (${process.env.ADMIN_USERNAME.length} chars)` : "UNDEFINED");
+  console.log("2. ENV Password:", process.env.ADMIN_PASSWORD ? "Set (hidden)" : "UNDEFINED");
+  console.log("3. User typed login:", login ? `Set (${login.length} chars)` : "UNDEFINED");
   if (login && password && login === process.env.ADMIN_USERNAME && password === process.env.ADMIN_PASSWORD) {
     return next();
   }
