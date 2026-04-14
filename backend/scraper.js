@@ -10,9 +10,7 @@
 
 require('dotenv').config();
 
-const { chromium }    = require('playwright-extra');
-const stealth         = require('puppeteer-extra-plugin-stealth')();
-chromium.use(stealth);
+const { chromium }    = require('playwright');
 
 const nodemailer      = require('nodemailer');
 const mongoose        = require('mongoose');
@@ -302,7 +300,7 @@ async function runScrapeForDoc(doc) {
   try {
     browser = await chromium.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
     console.log("--- Stealth Playwright launched successfully.");
     await scrapeOneHotel(doc, browser);
@@ -343,7 +341,7 @@ async function runScrapeJob() {
   try {
     browser = await chromium.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
     console.log("--- Stealth Playwright launched successfully.");
     for (const hotel of hotels) {

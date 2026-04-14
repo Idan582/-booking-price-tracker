@@ -100,15 +100,11 @@ app.post('/api/track', async (req, res) => {
       new: true, upsert: true, setDefaultsOnInsert: true, runValidators: true,
     });
 
-    // Respond to the client immediately
-    res.status(200).json({
-      message: 'Tracking saved successfully.',
-      entry:   doc,
-    });
+    // Respond immediately — do not make the browser wait for the scrape
+    res.status(200).json({ success: true });
 
-    // Trigger the scrape in the background — placed here so nothing between
-    // the DB save and this call can throw and silently skip it.
-    console.log("--- DB saved successfully. Triggering immediate scrape now...");
+    // Background scrape
+    console.log("!!! TRIGGER RECEIVED - STARTING SCRAPE FOR: " + doc.url);
     runScrapeForDoc(doc.toObject()).catch((err) =>
       console.error('[Scraper] Immediate scrape failed:', err.message, err.stack)
     );
