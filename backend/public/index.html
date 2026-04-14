@@ -174,13 +174,16 @@
       btn.disabled = true;
       btn.textContent = 'Submitting...';
 
-      const url           = document.getElementById('url').value.trim();
-      const targetPrice   = parseFloat(document.getElementById('targetPrice').value);
-      const email         = document.getElementById('email').value.trim() || null;
+      const url            = document.getElementById('url').value.trim();
+      const targetPrice    = parseFloat(document.getElementById('targetPrice').value);
+      const email          = document.getElementById('email').value.trim() || null;
       const telegramChatId = document.getElementById('telegramChatId').value.trim() || null;
 
+      const apiUrl = window.location.origin + '/api/track';
+      alert('Sending request to: ' + apiUrl);
+
       try {
-        const res = await fetch('/api/track', {
+        const res = await fetch(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -193,6 +196,8 @@
           }),
         });
 
+        alert('Response received! Status: ' + res.status);
+
         const data = await res.json();
 
         if (res.ok) {
@@ -203,7 +208,8 @@
           msg.className = 'message error';
           msg.textContent = data.error || 'Something went wrong. Please try again.';
         }
-      } catch {
+      } catch (err) {
+        alert('FETCH ERROR: ' + err.message);
         msg.className = 'message error';
         msg.textContent = 'Could not reach the server. Please try again later.';
       } finally {
