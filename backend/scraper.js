@@ -185,29 +185,17 @@ async function sendEmailAlert({ to, roomPackage, currentPrice, targetPrice, url,
 //
 // This function is serialised and sent to the page via page.evaluate().
 // It MUST be fully self-contained — no references to the outer Node.js scope.
-// The logic mirrors content.js's package-building and price-extraction exactly
-// so the package strings match what was saved when the user clicked the button.
+//
+// Strategy: collect ALL visible prices on the page and return the lowest one.
+// We do NOT match by room/package name — any available price for the given
+// dates is valid; the user wants the cheapest option.
 
-function extractPriceInPage(targetPkg) {
-  function clean(el) {
-    return el ? el.textContent.replace(/\s+/g, ' ').trim() : '';
-  }
-
+function extractPriceInPage() {
   function parseNum(el) {
     if (!el) return null;
     var raw = el.textContent.replace(/[^\d.,]/g, '').replace(/,/g, '');
     var n   = parseFloat(raw);
-    return (isNaN(n) || n <= 0) ? null : n;
-  }
-
-  function buildPkg(roomName, condEls) {
-    var name  = roomName.trim();
-    var parts = [name];
-    condEls.forEach(function (el) {
-      var t = clean(el);
-      if (t && t !== name && parts.indexOf(t) === -1 && t.length <= 120) parts.push(t);
-    });
-    return parts.join(' - ');
+    return (isNaN(n) || n <= 0 || n > 100000) ? null : n;
   }
 
   var PRICE_SELS = [
@@ -227,132 +215,55 @@ function extractPriceInPage(targetPkg) {
     '[class*="prco-inline"]',
     '[class*="priceValue"]',
     '[class*="price-value"]',
-    '[class*="ugiat"]',        // obfuscated React bundles often contain this fragment
+    '[class*="ugiat"]',
     // Currency element wrappers
     '[data-et-click*="price"]',
-    'span[aria-hidden="true"]',
   ].join(',');
 
-  var COND_SELS = [
-    '[data-testid="cancellation-policy-text"]',
-    '[data-testid*="cancel"]',
-    '[data-testid="meal-plan-text"]',
-    '[data-testid*="meal"]',
-    '.hprt-meal-type',
-    '.meal-type-content',
-    '.hprt-free-cancellation',
-    '.hprt-non-refundable',
-    '[class*="cancellation"]',
-    '[class*="mealPlan"]',
-    '[class*="meal-plan"]',
-    '.hprt-conditions li',
-  ].join(',');
+  var allPrices = [];
 
-  // ── Strategy 1: Classic hprt table ────────────────────────────────────────
-  var table = document.querySelector(
-    'table.hprt-table, #hprt-table, [data-selenium="hotel-availability-table"]'
-  );
+  // ── Strategy 1: CSS price selectors ──────────────────────────────────────
+  var priceEls = Array.from(document.querySelectorAll(PRICE_SELS));
+  priceEls.forEach(function(el) {
+    var n = parseNum(el);
+    if (n !== null) allPrices.push(n);
+  });
 
-  if (table) {
-    var currentName = '';
-    var rows = table.querySelectorAll('tbody tr');
-    for (var i = 0; i < rows.length; i++) {
-      var row    = rows[i];
-      var nameEl = row.querySelector(
-        '.hprt-roomtype-link, [data-selenium="roomName"] a, ' +
-        '.hprt-roomtype-name, [data-testid="roomtype-name"]'
-      );
-      if (nameEl) currentName = clean(nameEl);
-      if (!currentName) continue;
-
-      var hasCta = row.querySelector(
-        '.hprt-booking-cta, [data-selenium="cta-button-element"], ' +
-        '[data-testid="submit-button"], button[data-testid]'
-      );
-      if (!hasCta) continue;
-
-      var condEls = Array.from(row.querySelectorAll(COND_SELS));
-      if (buildPkg(currentName, condEls) === targetPkg) {
-        return parseNum(row.querySelector(PRICE_SELS));
-      }
+  // ── Strategy 2: Walk all leaf elements containing ₪ / ILS ────────────────
+  if (allPrices.length === 0) {
+    var allEls = Array.from(document.querySelectorAll('*'));
+    for (var e = 0; e < allEls.length; e++) {
+      var el = allEls[e];
+      if (el.children.length > 5) continue;
+      var txt = el.textContent || '';
+      if (txt.indexOf('₪') === -1 && txt.indexOf('ILS') === -1) continue;
+      var raw = txt.replace(/[^\d.,]/g, '').replace(/,/g, '');
+      var n   = parseFloat(raw);
+      if (!isNaN(n) && n > 0 && n < 100000) allPrices.push(n);
     }
   }
 
-  // ── Strategy 2: Modern React room-type blocks ──────────────────────────────
-  var roomBlocks = document.querySelectorAll(
-    '[data-testid="rt-roomtype-block"], [data-testid="hprt-roomtype-block"], ' +
-    '[data-testid="room-type-block"], [data-testid="roomtype-block"]'
-  );
+  if (allPrices.length === 0) return null;
 
-  for (var b = 0; b < roomBlocks.length; b++) {
-    var block    = roomBlocks[b];
-    var rNameEl  = block.querySelector(
-      '[data-testid="roomtype-name"], [data-testid="room-type-name"], ' +
-      '[data-testid="rt-roomtype-name"], [data-testid="room-name"], .hprt-roomtype-link'
-    );
-    if (!rNameEl) continue;
-    var roomName = clean(rNameEl);
-
-    var offers  = block.querySelectorAll(
-      '[data-testid="rt-offer-block"], [data-testid="offer-list-item"], ' +
-      '[data-testid="offer-block"], .hprt-roomtype-offer'
-    );
-    var targets = offers.length > 0 ? Array.from(offers) : [block];
-
-    for (var o = 0; o < targets.length; o++) {
-      var offer   = targets[o];
-      var condEls = Array.from(offer.querySelectorAll(COND_SELS));
-      if (buildPkg(roomName, condEls) === targetPkg) {
-        return parseNum(offer.querySelector(PRICE_SELS));
-      }
-    }
-  }
-
-  // ── Strategy 3: Currency-text fallback ───────────────────────────────────
-  // Walk every element that contains ₪ or ILS and try to parse a price near
-  // text that matches the target package (loose substring match).
-  var allEls = Array.from(document.querySelectorAll('*'));
-  for (var e = 0; e < allEls.length; e++) {
-    var el = allEls[e];
-    var txt = el.textContent || '';
-    if ((txt.indexOf('₪') === -1 && txt.indexOf('ILS') === -1) || el.children.length > 5) continue;
-    var raw = txt.replace(/[^\d.,]/g, '').replace(/,/g, '');
-    var n   = parseFloat(raw);
-    if (isNaN(n) || n <= 0 || n > 100000) continue;
-    // Accept if the surrounding section text contains part of the package name
-    var section = el.closest('[data-testid], tr, .hprt-roomtype-offer, [class*="room"]');
-    var sectionText = section ? section.textContent : '';
-    var pkgWords = targetPkg.split(/\s+/).slice(0, 3); // first 3 words of package
-    var match = pkgWords.some(function(w) { return w.length > 3 && sectionText.indexOf(w) !== -1; });
-    if (match) return n;
-  }
-
-  return null; // package not found on page
+  // Return the lowest price found (cheapest available room)
+  allPrices.sort(function(a, b) { return a - b; });
+  return allPrices[0];
 }
 
 // ── Per-hotel scrape logic (shared by cron job and immediate trigger) ─────────
 
 async function scrapeOneHotel(hotel, browser) {
-  console.log(`\n[Scraper] ↳ "${hotel.roomPackage}"`);
+  console.log(`\n[Scraper] ↳ ${hotel.url}`);
 
-  // Force English layout — more stable selectors than Hebrew
-  const scrapeUrl = (() => {
-    try {
-      const u = new URL(hotel.url);
-      u.searchParams.set('lang', 'en-gb');
-      return u.toString();
-    } catch {
-      return hotel.url + (hotel.url.includes('?') ? '&' : '?') + 'lang=en-gb';
-    }
-  })();
+  // Use the original URL exactly as provided — no language override
+  const scrapeUrl = hotel.url;
 
   const context = await browser.newContext({
     userAgent:
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
       'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.207 Safari/537.36',
-    locale: 'en-GB',
     extraHTTPHeaders: {
-      'Accept-Language': 'en-GB,en;q=0.9,he;q=0.8',
+      'Accept-Language': 'he-IL,he;q=0.9,en;q=0.8',
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
       'Accept-Encoding': 'gzip, deflate, br',
       'Cache-Control': 'no-cache',
@@ -397,8 +308,8 @@ async function scrapeOneHotel(hotel, browser) {
     // 10-second wait for full React hydration
     await page.waitForTimeout(10000);
 
-    // ── CSS-selector strategy (existing extractPriceInPage) ──────────────────
-    let currentPrice = await page.evaluate(extractPriceInPage, hotel.roomPackage);
+    // ── CSS-selector strategy: collect all prices, pick the lowest ───────────
+    let currentPrice = await page.evaluate(extractPriceInPage);
 
     // ── Regex / deep-search fallback ─────────────────────────────────────────
     if (currentPrice === null) {
