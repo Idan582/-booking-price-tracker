@@ -110,7 +110,7 @@ app.post('/api/track', async (req, res) => {
     });
 
     runScrapeForDoc(doc.toObject()).catch((err) =>
-      console.error('[Scraper] Immediate scrape failed:', err.message)
+      console.error('[Scraper] Immediate scrape failed:', err.message, err.stack)
     );
     return;
   } catch (err) {

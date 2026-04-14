@@ -295,18 +295,21 @@ async function scrapeOneHotel(hotel, browser) {
 // ── Immediate single-hotel scrape (called on POST /api/track) ─────────────────
 
 async function runScrapeForDoc(doc) {
-  const hotelUrl = doc.url;
-  console.log("Immediate scrape triggered for: " + hotelUrl);
-  console.log("--- Starting Scrape for: " + hotelUrl);
+  console.log("Immediate scrape triggered for: " + doc.url);
+  console.log("--- Attempting to launch Stealth Playwright...");
 
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  });
+  let browser;
   try {
+    browser = await chromium.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    });
+    console.log("--- Stealth Playwright launched successfully.");
     await scrapeOneHotel(doc, browser);
+  } catch (error) {
+    console.error("--- FATAL SCRAPE ERROR: ", error.message, error.stack);
   } finally {
-    await browser.close();
+    if (browser) await browser.close().catch(() => {});
   }
 }
 
@@ -334,18 +337,22 @@ async function runScrapeJob() {
   }
 
   console.log(`[Scraper] ${hotels.length} hotel package(s) to check.`);
+  console.log("--- Attempting to launch Stealth Playwright...");
 
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  });
-
+  let browser;
   try {
+    browser = await chromium.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    });
+    console.log("--- Stealth Playwright launched successfully.");
     for (const hotel of hotels) {
       await scrapeOneHotel(hotel, browser);
     }
+  } catch (error) {
+    console.error("--- FATAL SCRAPE ERROR: ", error.message, error.stack);
   } finally {
-    await browser.close();
+    if (browser) await browser.close().catch(() => {});
   }
 
   console.log('\n[Scraper] ─── Price check complete ───\n');
