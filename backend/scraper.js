@@ -302,7 +302,7 @@ async function runScrapeForDoc(doc) {
   try {
     browser = await chromium.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
     console.log("--- Stealth Playwright launched successfully.");
     await scrapeOneHotel(doc, browser);
@@ -343,7 +343,7 @@ async function runScrapeJob() {
   try {
     browser = await chromium.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
     console.log("--- Stealth Playwright launched successfully.");
     for (const hotel of hotels) {

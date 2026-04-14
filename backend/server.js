@@ -56,6 +56,7 @@ function isValidBookingUrl(url) {
 
 // ── POST /api/track  (public — called by the Chrome extension) ───────────────
 app.post('/api/track', async (req, res) => {
+  console.log(">>> REACHED POST ROUTE <<<");
   const {
     url, roomPackage, roomType, targetPrice, originalPrice,
     hotelName, checkIn, checkOut, guests, rooms,
