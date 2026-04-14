@@ -99,16 +99,15 @@ app.post('/api/track', async (req, res) => {
       new: true, upsert: true, setDefaultsOnInsert: true, runValidators: true,
     });
 
-    const isNew    = doc.addedAt.getTime() === doc.updatedAt.getTime();
-    const channels = [doc.email && 'email', doc.telegram && 'telegram'].filter(Boolean).join(', ') || 'none';
-    console.log(`[${isNew ? 'ADDED' : 'UPDATED'}] "${doc.roomPackage}" → ₪${price} — notify: ${channels}`);
-
-    // Respond immediately, then kick off a scrape in the background
+    // Respond to the client immediately
     res.status(200).json({
-      message: isNew ? 'Tracking started successfully.' : 'Tracking updated successfully.',
+      message: 'Tracking saved successfully.',
       entry:   doc,
     });
 
+    // Trigger the scrape in the background — placed here so nothing between
+    // the DB save and this call can throw and silently skip it.
+    console.log("--- DB saved successfully. Triggering immediate scrape now...");
     runScrapeForDoc(doc.toObject()).catch((err) =>
       console.error('[Scraper] Immediate scrape failed:', err.message, err.stack)
     );
